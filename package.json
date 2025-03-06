@@ -11,6 +11,7 @@
     "@types/morgan": "^1.9.9",
     "@types/validator": "^13.12.2",
     "ai": "^4.1.52",
+    "alawmulaw": "^6.0.0",
     "bullmq": "^5.1.1",
     "cors": "^2.8.5",
     "cross-fetch": "^4.1.0",

@@ -95,65 +95,77 @@ class PhoneCall {
       throw new Error("Invalid STT provider");
     }
 
-    const llmEngine = new OpenAIService();
-    await llmEngine.initialize();
+    if (this.payload.llmProvider === "openai") {
+      const llmEngine = new OpenAIService();
+      await llmEngine.initialize();
 
-    this.llmEngine = llmEngine;
-    llmEngines[this.id] = llmEngine;
+      this.llmEngine = llmEngine;
+      llmEngines[this.id] = llmEngine;
 
-    llmEngine.on("chunk", (text: string) => {
-      console.log("🤖 AI response chunk:", text);
-      eventBus.emit("call.response.chunk.generated", {
-        ctx: {
-          callId: this.id,
-          provider: "openai",
-          timestamp: Date.now(),
-        },
-        data: { text },
+      llmEngine.on("chunk", (text: string) => {
+        console.log("🤖 AI response chunk:", text);
+        eventBus.emit("call.response.chunk.generated", {
+          ctx: {
+            callId: this.id,
+            provider: "openai",
+            timestamp: Date.now(),
+          },
+          data: { text },
+        });
       });
-    });
 
-    llmEngine.on("error", (error: Error) => {
-      console.error("❌ LLM Error:", error);
-      eventBus.emit("call.error", {
-        ctx: {
-          callId: this.id,
-          provider: "openai",
-          timestamp: Date.now(),
-        },
-        error,
+      llmEngine.on("error", (error: Error) => {
+        console.error("❌ LLM Error:", error);
+        eventBus.emit("call.error", {
+          ctx: {
+            callId: this.id,
+            provider: "openai",
+            timestamp: Date.now(),
+          },
+          error,
+        });
       });
-    });
+    } else {
+      throw new Error("Invalid LLM provider");
+    }
 
-    const ttsEngine = new DeepgramTTSService();
-    await ttsEngine.initialize();
+    if (this.payload.ttsProvider === "deepgram") {
+      const ttsEngine = new DeepgramTTSService();
+      await ttsEngine.initialize();
 
-    this.ttsEngine = ttsEngine;
-    ttsEngines[this.id] = ttsEngine;
+      this.ttsEngine = ttsEngine;
+      ttsEngines[this.id] = ttsEngine;
 
-    ttsEngine.on("chunk", (audioChunk: Buffer) => {
-      console.log("🔊 TTS audio chunk generated");
-      eventBus.emit("call.audio.chunk.synthesized", {
-        ctx: {
-          callId: this.id,
-          provider: "deepgram",
-          timestamp: Date.now(),
-        },
-        data: { chunk: audioChunk.toString("base64") },
+      ttsEngine.on("chunk", (audioChunk: Buffer) => {
+        console.log("🔊 TTS audio chunk generated:", {
+          size: audioChunk.length,
+          type: audioChunk.constructor.name,
+          firstFewBytes: audioChunk.slice(0, 20).toString("hex"),
+        });
+        eventBus.emit("call.audio.chunk.synthesized", {
+          ctx: {
+            callId: this.id,
+            provider: "deepgram",
+            timestamp: Date.now(),
+          },
+          data: { chunk: audioChunk.toString("base64") },
+        });
       });
-    });
 
-    ttsEngine.on("error", (error: Error) => {
-      console.error("❌ TTS Error:", error);
-      eventBus.emit("call.error", {
-        ctx: {
-          callId: this.id,
-          provider: "deepgram",
-          timestamp: Date.now(),
-        },
-        error,
+      ttsEngine.on("error", (error: Error) => {
+        console.error("❌ TTS Error:", error);
+        eventBus.emit("call.error", {
+          ctx: {
+            callId: this.id,
+            provider: "deepgram",
+            timestamp: Date.now(),
+          },
+          error,
+        });
       });
-    });
+    } else {
+      throw new Error("Invalid TTS provider");
+    }
   }
 
   async cleanup() {
@@ -215,9 +227,19 @@ eventBus.on("call.audio.chunk.synthesized", async (event) => {
   const engine = telephonyEngines[ctx.callId];
   if (engine) {
     const audioChunk = data.chunk;
-    console.log("🔊 Sending audio chunk to call:", {
-      size: audioChunk.length,
-      type: audioChunk.constructor.name,
+    console.log("🔊 Audio chunk details before sending:", {
+      isBase64:
+        typeof audioChunk === "string" && /^[A-Za-z0-9+/=]+$/.test(audioChunk),
+      type: typeof audioChunk,
+      constructor: audioChunk.constructor.name,
+      size:
+        typeof audioChunk === "string"
+          ? audioChunk.length
+          : (audioChunk as Buffer).length,
+      firstFewBytes:
+        typeof audioChunk === "string"
+          ? audioChunk.slice(0, 20)
+          : Buffer.from(audioChunk).slice(0, 20).toString("hex"),
     });
     await engine.send(audioChunk);
   } else {

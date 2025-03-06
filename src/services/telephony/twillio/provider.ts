@@ -1,6 +1,7 @@
 import WebSocket from "ws";
 import fs from "fs";
 import { TelephonyProvider } from "../../../types/providers/telephony";
+import { mulaw } from "alawmulaw";
 
 export class TwilioProvider implements TelephonyProvider {
   private ws: WebSocket | null = null;
@@ -26,9 +27,6 @@ export class TwilioProvider implements TelephonyProvider {
           console.log("Received start event from Twilio");
           this.isStarted = true;
           this.sid = message.streamSid;
-
-          // // test the send, cancel, and hangup functions
-          // this.test();
         }
 
         if (message.event === "media") {
@@ -47,51 +45,52 @@ export class TwilioProvider implements TelephonyProvider {
     });
   }
 
-  // private async test() {
-  //   if (!this.isStarted || !this.ws) {
-  //     console.log("Cannot play audio: call not started or WebSocket closed");
-  //     return;
-  //   }
-
-  //   try {
-  //     // Convert audio to mulaw using ffmpeg
-  //     const audioData = fs.readFileSync("output.mulaw").toString("base64");
-  //     this.send(audioData);
-  //     console.log("Audio sent");
-  //     setTimeout(() => {
-  //       this.cancel();
-  //     }, 5000);
-  //     setTimeout(() => {
-  //       this.hangup();
-  //     }, 10000);
-  //   } catch (error) {
-  //     console.error("Error playing audio file:", error);
-  //   }
-  // }
-
-  public async send(base64Audio: string): Promise<void> {
+  public async send(audioData: string): Promise<void> {
     if (!this.ws) {
       console.log("WebSocket not connected");
       return;
     }
 
-    console.log("Sending audio to Twilio", {
-      event: "media",
-      streamSid: this.sid,
-      media: {
-        payload: base64Audio,
-      },
-    });
+    try {
+      const rawBuffer = Buffer.from(audioData, "base64");
 
-    this.ws.send(
-      JSON.stringify({
-        event: "media",
-        streamSid: this.sid,
-        media: {
-          payload: base64Audio,
-        },
-      })
-    );
+      const alignedBuffer = Buffer.alloc(rawBuffer.length);
+      rawBuffer.copy(alignedBuffer);
+
+      const samples = new Int16Array(
+        alignedBuffer.buffer,
+        alignedBuffer.byteOffset,
+        alignedBuffer.length / 2
+      );
+
+      const mulawData = mulaw.encode(samples);
+
+      const mulawBase64 = Buffer.from(mulawData).toString("base64");
+
+      console.log("📞 Audio conversion:", {
+        inputLength: audioData.length,
+        rawBufferSize: rawBuffer.length,
+        samplesLength: samples.length,
+        mulawLength: mulawData.length,
+        outputLength: mulawBase64.length,
+        firstFewSamples: Array.from(samples.slice(0, 3)),
+        firstFewMulaw: Array.from(mulawData.slice(0, 3)),
+        sampleRate: 8000,
+      });
+
+      this.ws.send(
+        JSON.stringify({
+          event: "media",
+          streamSid: this.sid,
+          media: {
+            payload: mulawBase64,
+          },
+        })
+      );
+    } catch (error) {
+      console.error("Error converting to mulaw:", error);
+      console.error(error);
+    }
   }
 
   public async cancel(): Promise<void> {

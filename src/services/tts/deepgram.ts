@@ -16,7 +16,11 @@ export class DeepgramTTSService extends EventEmitter implements TTSService {
   }
 
   private onChunk(data: Buffer): void {
-    console.log("🔊 Audio chunk received");
+    console.log("🔊 Audio chunk received:", {
+      size: data.length,
+      type: "PCM16",
+      sampleRate: 8000,
+    });
     this.emit("chunk", data);
   }
 
@@ -26,6 +30,8 @@ export class DeepgramTTSService extends EventEmitter implements TTSService {
     try {
       this.connection = this.deepgramClient.speak.live({
         model: "aura-asteria-en",
+        encode: "mulaw",
+        sampleRate: 8000,
       });
 
       this.connection.on(LiveTTSEvents.Open, () => {
@@ -77,7 +83,7 @@ export class DeepgramTTSService extends EventEmitter implements TTSService {
 
     try {
       this.connection.sendText(text);
-      this.connection.flush();
+      // this.connection.flush();
       return text;
     } catch (error) {
       console.error("❌ Error processing text:", error);

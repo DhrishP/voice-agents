@@ -32,7 +32,7 @@ interface AppEvents extends EventMap {
   "call.audio.chunk.synthesized": {
     ctx: { provider: string; callId: string; timestamp: number };
     data: {
-      chunk: string;
+      chunk: Buffer | string;
     };
   };
 }
