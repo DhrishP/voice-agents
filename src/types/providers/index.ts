@@ -1,6 +1,6 @@
-import { STTProvider } from "./stt";
-import { AIProvider } from "./ai";
-import { TTSProvider } from "./tts";
+import { STTService } from "./stt";
+import { AIService } from "./ai";
+import { TTSService } from "./tts";
 import { TelephonyProvider } from "./telephony";
 
-export { STTProvider, AIProvider, TTSProvider, TelephonyProvider };
+export { STTService, AIService, TTSService, TelephonyProvider };

@@ -1,5 +1,5 @@
 export interface TelephonyProvider {
-  send(base64Audio: string): Promise<void>;
+  send(audioData: Buffer | string): Promise<void>;
   cancel(): Promise<void>;
   onListen(callback: (text: string) => void): void;
   hangup(): Promise<void>;
