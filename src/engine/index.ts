@@ -164,7 +164,7 @@ class PhoneCall {
           error,
         });
       });
-    } else if (this.payload.ttsProvider === "elevenlabs ") {
+    } else if (this.payload.ttsProvider === "elevenlabs") {
       const ttsEngine = new ElevenLabsTTSService();
       await ttsEngine.initialize();
 

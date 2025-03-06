@@ -43,7 +43,7 @@ app.get("/test", (req, res) => {
       "Hello! This is a test call from our voice agent. Please say something, and I will respond.",
     telephonyProvider: "twilio",
     sttProvider: "deepgram",
-    ttsProvider: "deepgram",
+    ttsProvider: "elevenlabs",
     llmProvider: "openai",
   });
   res.send("Call initiated");

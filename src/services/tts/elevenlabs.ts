@@ -45,9 +45,9 @@ export class ElevenLabsTTSService extends EventEmitter implements TTSService {
 
     try {
       const audio = await this.client.textToSpeech.convert(this.voiceId, {
-        text: text,
         model_id: "eleven_multilingual_v2",
-        output_format: "mp3_44100_128",
+        output_format: "ulaw_8000",
+        text: text,
       });
 
       this.processAudioStream(audio).catch((error) => {

@@ -52,30 +52,16 @@ export class TwilioProvider implements TelephonyProvider {
     }
 
     try {
-      const rawBuffer = Buffer.from(audioData, "base64");
+      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(audioData)) {
+        throw new Error("Invalid base64 data received");
+      }
 
-      const alignedBuffer = Buffer.alloc(rawBuffer.length);
-      rawBuffer.copy(alignedBuffer);
-
-      const samples = new Int16Array(
-        alignedBuffer.buffer,
-        alignedBuffer.byteOffset,
-        alignedBuffer.length / 2
-      );
-
-      const mulawData = mulaw.encode(samples);
-
-      const mulawBase64 = Buffer.from(mulawData).toString("base64");
-
-      console.log("📞 Audio conversion:", {
+      console.log("📞 Audio details:", {
         inputLength: audioData.length,
-        rawBufferSize: rawBuffer.length,
-        samplesLength: samples.length,
-        mulawLength: mulawData.length,
-        outputLength: mulawBase64.length,
-        firstFewSamples: Array.from(samples.slice(0, 3)),
-        firstFewMulaw: Array.from(mulawData.slice(0, 3)),
+        format: "ulaw_8000",
         sampleRate: 8000,
+        isBase64: true,
+        firstFewBytes: Buffer.from(audioData, "base64").slice(0, 5),
       });
 
       this.ws.send(
@@ -83,12 +69,12 @@ export class TwilioProvider implements TelephonyProvider {
           event: "media",
           streamSid: this.sid,
           media: {
-            payload: mulawBase64,
+            payload: audioData,
           },
         })
       );
     } catch (error) {
-      console.error("Error converting to mulaw:", error);
+      console.error("Error sending audio:", error);
       console.error(error);
     }
   }
