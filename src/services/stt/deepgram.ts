@@ -1,8 +1,8 @@
 import { createClient, LiveTranscriptionEvents } from "@deepgram/sdk";
 import { EventEmitter } from "events";
-import { STTProvider } from "../../providers/stt";
+import { STTEvents, STTService } from "../../types/providers/stt";
 
-export class DeepgramService extends EventEmitter implements STTProvider {
+export class DeepgramSTTService extends EventEmitter implements STTService {
   private deepgramClient: any;
   private connection: any;
   private isInitialized = false;
@@ -14,6 +14,11 @@ export class DeepgramService extends EventEmitter implements STTProvider {
       throw new Error("DEEPGRAM_API_KEY is required in environment variables");
     }
     this.deepgramClient = createClient(apiKey);
+  }
+
+  private onTranscription(text: string): void {
+    console.log("📝 Transcription received:", text);
+    this.emit("transcription", text);
   }
 
   async initialize(): Promise<void> {
@@ -31,19 +36,22 @@ export class DeepgramService extends EventEmitter implements STTProvider {
       this.connection.on(LiveTranscriptionEvents.Transcript, (data: any) => {
         const transcript = data.channel?.alternatives[0]?.transcript;
         if (transcript && transcript.trim()) {
-          this.emit("deepgramTranscript", transcript);
+          this.onTranscription(transcript);
         }
       });
 
       this.connection.on(LiveTranscriptionEvents.Error, (error: any) => {
-        this.emit("deepgramError", error);
+        console.error("❌ Deepgram STT Error:", error);
+        this.emit("error", error);
       });
 
       this.connection.on(LiveTranscriptionEvents.Open, () => {
+        console.log("🎙️ Deepgram STT: Connected");
         this.isInitialized = true;
       });
 
       this.connection.on(LiveTranscriptionEvents.Close, () => {
+        console.log("🎙️ Deepgram STT: Connection closed");
         this.isInitialized = false;
       });
     } catch (error) {
@@ -60,14 +68,21 @@ export class DeepgramService extends EventEmitter implements STTProvider {
     try {
       this.connection.send(Buffer.from(chunk, "base64"));
     } catch (error) {
-      this.emit("error", error);
+      console.error("❌ Error processing audio chunk:", error);
+      this.emit("error", error as Error);
     }
   }
 
   async close(): Promise<void> {
     if (this.connection) {
-      this.connection.finish();
-      this.isInitialized = false;
+      try {
+        this.connection.finish();
+      } catch (error) {
+        console.error("❌ Error closing STT connection:", error);
+      } finally {
+        this.connection = null;
+        this.isInitialized = false;
+      }
     }
   }
 }

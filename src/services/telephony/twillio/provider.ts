@@ -27,8 +27,8 @@ export class TwilioProvider implements TelephonyProvider {
           this.isStarted = true;
           this.sid = message.streamSid;
 
-          // test the send, cancel, and hangup functions
-          this.test();
+          // // test the send, cancel, and hangup functions
+          // this.test();
         }
 
         if (message.event === "media") {
@@ -47,27 +47,27 @@ export class TwilioProvider implements TelephonyProvider {
     });
   }
 
-  private async test() {
-    if (!this.isStarted || !this.ws) {
-      console.log("Cannot play audio: call not started or WebSocket closed");
-      return;
-    }
+  // private async test() {
+  //   if (!this.isStarted || !this.ws) {
+  //     console.log("Cannot play audio: call not started or WebSocket closed");
+  //     return;
+  //   }
 
-    try {
-      // Convert audio to mulaw using ffmpeg
-      const audioData = fs.readFileSync("output.mulaw").toString("base64");
-      this.send(audioData);
-      console.log("Audio sent");
-      setTimeout(() => {
-        this.cancel();
-      }, 5000);
-      setTimeout(() => {
-        this.hangup();
-      }, 10000);
-    } catch (error) {
-      console.error("Error playing audio file:", error);
-    }
-  }
+  //   try {
+  //     // Convert audio to mulaw using ffmpeg
+  //     const audioData = fs.readFileSync("output.mulaw").toString("base64");
+  //     this.send(audioData);
+  //     console.log("Audio sent");
+  //     setTimeout(() => {
+  //       this.cancel();
+  //     }, 5000);
+  //     setTimeout(() => {
+  //       this.hangup();
+  //     }, 10000);
+  //   } catch (error) {
+  //     console.error("Error playing audio file:", error);
+  //   }
+  // }
 
   public async send(base64Audio: string): Promise<void> {
     if (!this.ws) {

@@ -1,14 +1,19 @@
 import { EventEmitter } from "events";
-import { TTSProvider } from "../../providers/tts";
+import { TTSEvents, TTSService } from "../../types/providers/tts";
 import { ElevenLabsClient } from "elevenlabs";
 
-export class ElevenLabsTTSService extends EventEmitter implements TTSProvider {
+export class ElevenLabsTTSService extends EventEmitter implements TTSService {
   private client!: ElevenLabsClient;
   private isInitialized = false;
   private voiceId = "JBFqnCBsd6RMkjVDRZzb";
 
   constructor() {
     super();
+  }
+
+  private onChunk(data: Buffer): void {
+    console.log("🔊 Audio chunk received");
+    this.emit("chunk", data);
   }
 
   async initialize(): Promise<void> {
@@ -25,7 +30,7 @@ export class ElevenLabsTTSService extends EventEmitter implements TTSProvider {
   private async processAudioStream(audio: any) {
     try {
       for await (const chunk of audio) {
-        this.emit("chunk", chunk);
+        this.onChunk(chunk);
       }
     } catch (error) {
       console.error("❌ ElevenLabs TTS Error:", error);

@@ -1,8 +1,8 @@
 import { EventEmitter } from "events";
-import { TTSProvider } from "../../providers/tts";
+import { TTSEvents, TTSService } from "../../types/providers/tts";
 import { createClient, LiveTTSEvents } from "@deepgram/sdk";
 
-export class DeepgramTTSService extends EventEmitter implements TTSProvider {
+export class DeepgramTTSService extends EventEmitter implements TTSService {
   private deepgramClient: any;
   private connection: any = null;
   private isInitialized = false;
@@ -13,6 +13,11 @@ export class DeepgramTTSService extends EventEmitter implements TTSProvider {
       throw new Error("DEEPGRAM_API_KEY is required in environment variables");
     }
     this.deepgramClient = createClient(process.env.DEEPGRAM_API_KEY);
+  }
+
+  private onChunk(data: Buffer): void {
+    console.log("🔊 Audio chunk received");
+    this.emit("chunk", data);
   }
 
   async initialize(): Promise<void> {
@@ -29,7 +34,7 @@ export class DeepgramTTSService extends EventEmitter implements TTSProvider {
       });
 
       this.connection.on(LiveTTSEvents.Audio, (data: Buffer) => {
-        this.emit("chunk", data);
+        this.onChunk(data);
       });
 
       this.connection.on(LiveTTSEvents.Error, (error: Error) => {

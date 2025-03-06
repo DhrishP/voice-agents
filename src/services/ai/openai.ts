@@ -1,13 +1,25 @@
 import { EventEmitter } from "events";
-import { AIProvider } from "../../providers/ai";
+import { AIEvents, AIService } from "../../types/providers/ai";
 import { openai } from "@ai-sdk/openai";
 import { generateText, streamText } from "ai";
 
-export class OpenAIService extends EventEmitter implements AIProvider {
+export class OpenAIService extends EventEmitter implements AIService {
   private isInitialized = false;
+  private currentResponse: string = "";
 
   constructor() {
     super();
+  }
+
+  private onChunk(text: string): void {
+    console.log("🤖 AI chunk received:", text);
+    this.currentResponse += text;
+    this.emit("chunk", text);
+
+    if (text.match(/[.!?](\s|$)/)) {
+      this.emit("response", this.currentResponse);
+      this.currentResponse = "";
+    }
   }
 
   async initialize(): Promise<void> {
@@ -22,18 +34,13 @@ export class OpenAIService extends EventEmitter implements AIProvider {
       await this.initialize();
     }
 
-    try {
-      const { text } = await generateText({
-        model: openai("gpt-4"),
-        system: systemPrompt,
-        prompt: prompt,
-      });
+    const { text } = await generateText({
+      model: openai("gpt-4"),
+      system: systemPrompt,
+      prompt: prompt,
+    });
 
-      return text;
-    } catch (error) {
-      console.error("Error in generate:", error);
-      throw error;
-    }
+    return text;
   }
 
   async pipe(text: string): Promise<void> {
@@ -41,18 +48,13 @@ export class OpenAIService extends EventEmitter implements AIProvider {
       await this.initialize();
     }
 
-    try {
-      const { textStream } = await streamText({
-        model: openai("gpt-4"),
-        prompt: text,
-      });
+    const { textStream } = await streamText({
+      model: openai("gpt-4"),
+      prompt: text,
+    });
 
-      for await (const chunk of textStream) {
-        this.emit("chunk", chunk);
-      }
-    } catch (error) {
-      console.error("Error in pipe:", error);
-      this.emit("error", error as Error);
+    for await (const chunk of textStream) {
+      this.onChunk(chunk);
     }
   }
 }
