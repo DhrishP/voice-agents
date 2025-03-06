@@ -10,6 +10,7 @@ import {
   TelephonyProvider,
 } from "../types/providers";
 import twilioOperator from "../services/telephony/twillio/operator";
+import { ElevenLabsTTSService } from "../services/tts/elevenlabs";
 
 const sttEngines: Record<string, STTService> = {};
 const ttsEngines: Record<string, TTSService> = {};
@@ -158,6 +159,40 @@ class PhoneCall {
           ctx: {
             callId: this.id,
             provider: "deepgram",
+            timestamp: Date.now(),
+          },
+          error,
+        });
+      });
+    } else if (this.payload.ttsProvider === "elevenlabs ") {
+      const ttsEngine = new ElevenLabsTTSService();
+      await ttsEngine.initialize();
+
+      this.ttsEngine = ttsEngine;
+      ttsEngines[this.id] = ttsEngine;
+
+      ttsEngine.on("chunk", (audioChunk: Buffer) => {
+        console.log("🔊 TTS audio chunk generated:", {
+          size: audioChunk.length,
+          type: audioChunk.constructor.name,
+          firstFewBytes: audioChunk.slice(0, 20).toString("hex"),
+        });
+        eventBus.emit("call.audio.chunk.synthesized", {
+          ctx: {
+            callId: this.id,
+            provider: "elevenlabs",
+            timestamp: Date.now(),
+          },
+          data: { chunk: audioChunk.toString("base64") },
+        });
+      });
+
+      ttsEngine.on("error", (error: Error) => {
+        console.error("❌ TTS Error:", error);
+        eventBus.emit("call.error", {
+          ctx: {
+            callId: this.id,
+            provider: "elevenlabs",
             timestamp: Date.now(),
           },
           error,
