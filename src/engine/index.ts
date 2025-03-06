@@ -9,6 +9,10 @@ const ttsEngines: Record<string, TTSProvider> = {};
 const telephonyEngines: Record<string, TelephonyProvider> = {};
 const llmEngines: Record<string, AIProvider> = {};
 
+
+class PhoneCall {}
+
+
 eventBus.on("call.audio.chunk.received", (event) => {
   const { ctx, data } = event;
   const engine = sstEngines[ctx.callId];

@@ -17,8 +17,8 @@ export const VoiceCallRequestSchema = z.object({
   llmModel: z.string().default("gpt-4o-mini"),
   ttsProvider: z.string().default("elevenlabs"),
   ttsModel: z.string().default("eleven_turbo_v2_5"),
-  sttProvider: z.string().default("assemblyai"),
-  sttModel: z.string().default("assemblyai_whisper_1"),
+  sttProvider: z.string().default("deepgram"),
+  sttModel: z.string().default("whisper_1"),
   callId: z.string().optional(),
 });
 

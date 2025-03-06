@@ -14,7 +14,7 @@ export interface TelephonyProvider {
   shutdown(): Promise<void>;
 } 
 
-export class TelephonyProvider implements TelephonyProvider {
+export class Telephony implements TelephonyProvider {
   private static instance: TelephonyProvider;
   private queue: VoiceCallQueue;
   private worker: VoiceCallWorker;
@@ -28,10 +28,10 @@ export class TelephonyProvider implements TelephonyProvider {
   }
 
   public static getInstance(): TelephonyProvider {
-    if (!TelephonyProvider.instance) {
-      TelephonyProvider.instance = new TelephonyProvider();
+    if (!this.instance) {
+      this.instance = new Telephony();
     }
-    return TelephonyProvider.instance;
+    return this.instance;
   }
 
   public async initialize(): Promise<void> {
