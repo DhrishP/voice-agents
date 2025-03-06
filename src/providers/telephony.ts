@@ -2,6 +2,7 @@ import { VoiceCallQueue } from "../services/queue/voice-call-queue";
 import { VoiceCallWorker } from "../services/queue/voice-call-worker";
 import { VoiceCallRequest, VoiceCallRequestSchema } from "../types/voice-call";
 import twilioService from "../services/telephony/twillio/twilio-service";
+import { convertJsonSchemaToZod } from "../utils/schema";
 
 export class TelephonyProvider {
   private static instance: TelephonyProvider;

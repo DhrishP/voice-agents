@@ -1,11 +1,24 @@
 import { z } from "zod";
+import validator from "validator";
 
 export const VoiceCallRequestSchema = z.object({
-  fromNumber: z.string().min(1, "From number is required"),
-  toNumber: z.string().min(1, "To number is required"),
+  fromNumber: z
+    .string()
+    .min(1, "From number is required")
+    .refine(validator.isMobilePhone),
+  toNumber: z
+    .string()
+    .min(1, "To number is required")
+    .refine(validator.isMobilePhone),
   prompt: z.string().min(1, "Prompt is required"),
-  outputSchema: z.record(z.any()).optional(),
-  provider: z.string().default("twilio"),
+  outputSchema: z.record(z.string(), z.any()).optional(),
+  telephonyProvider: z.string().default("twilio"),
+  llmProvider: z.string().default("openai"),
+  llmModel: z.string().default("gpt-4o-mini"),
+  ttsProvider: z.string().default("elevenlabs"),
+  ttsModel: z.string().default("eleven_turbo_v2_5"),
+  sttProvider: z.string().default("assemblyai"),
+  sttModel: z.string().default("assemblyai_whisper_1"),
   callId: z.string().optional(),
 });
 

@@ -12,4 +12,10 @@ export const QUEUE_NAMES = {
   VOICE_CALL: "voice-call-queue",
 };
 
+export const workerConfig = {
+  connection,
+  queueNames: QUEUE_NAMES,
+  observabilityPort: parseInt(process.env.OBSERVABILITY_PORT || "4000"),
+};
+
 export default connection;

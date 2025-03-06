@@ -1,5 +1,5 @@
 import { Queue, QueueEvents } from "bullmq";
-import connection, { QUEUE_NAMES } from "../../utils/config";
+import connection, { QUEUE_NAMES } from "../../config/worker";
 import { VoiceCallJobData, VoiceCallJobResult } from "../../types/voice-call";
 
 export class VoiceCallQueue {

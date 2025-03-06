@@ -1,5 +1,5 @@
 import { Worker, Job } from "bullmq";
-import connection, { QUEUE_NAMES } from "../../utils/config";
+import connection, { QUEUE_NAMES } from "../../config/worker";
 import { VoiceCallJobData, VoiceCallJobResult } from "../../types/voice-call";
 import twilioService, { TwilioCall } from "../telephony/twillio/twilio-service";
 
@@ -44,9 +44,10 @@ export class VoiceCallWorker {
 
       await job.updateProgress(10);
 
-      const { fromNumber, toNumber, prompt, outputSchema, provider } = job.data;
+      const { fromNumber, toNumber, prompt, outputSchema, telephonyProvider } =
+        job.data;
       let call: TwilioCall | undefined = undefined;
-      if (provider === "twilio") {
+      if (telephonyProvider === "twilio") {
         const { callId } = await twilioService.makeCall(
           fromNumber,
           toNumber,

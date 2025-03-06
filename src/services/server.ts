@@ -11,8 +11,7 @@ export class AgentServer {
   private isRunning: boolean = false;
 
   private constructor() {
-    const { app } = expressWs(express());
-    this.app = app as express.Application & { ws: expressWs.Application["ws"] };
+    this.app = expressWs(express()).app;
     this.port = parseInt(process.env.TWILIO_SERVER_PORT || "3000");
 
     this.setupRoutes();
