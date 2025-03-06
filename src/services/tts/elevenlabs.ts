@@ -6,6 +6,8 @@ export class ElevenLabsTTSService extends EventEmitter implements TTSService {
   private client!: ElevenLabsClient;
   private isInitialized = false;
   private voiceId = "JBFqnCBsd6RMkjVDRZzb";
+  private buffer: string = "";
+  private bufferSize: number = 0;
 
   constructor() {
     super();
@@ -64,6 +66,11 @@ export class ElevenLabsTTSService extends EventEmitter implements TTSService {
   }
 
   async pipe(text: string): Promise<void> {
+    if (this.bufferSize < 10) {
+      this.buffer += text;
+      this.bufferSize += 1;
+      return;
+    }
     await this.generate(text);
   }
 
