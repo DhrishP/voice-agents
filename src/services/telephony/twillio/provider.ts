@@ -56,14 +56,6 @@ export class TwilioProvider implements TelephonyProvider {
         throw new Error("Invalid base64 data received");
       }
 
-      console.log("📞 Audio details:", {
-        inputLength: audioData.length,
-        format: "ulaw_8000",
-        sampleRate: 8000,
-        isBase64: true,
-        firstFewBytes: Buffer.from(audioData, "base64").slice(0, 5),
-      });
-
       this.ws.send(
         JSON.stringify({
           event: "media",

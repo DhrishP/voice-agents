@@ -12,7 +12,6 @@ export class OpenAIService extends EventEmitter implements AIService {
   }
 
   private onChunk(text: string): void {
-    console.log("🤖 AI chunk received:", text);
     this.currentResponse += text;
     this.emit("chunk", text);
 
@@ -29,14 +28,13 @@ export class OpenAIService extends EventEmitter implements AIService {
     this.isInitialized = true;
   }
 
-  async generate(systemPrompt: string, prompt: string): Promise<string> {
+  async generate(prompt: string): Promise<string> {
     if (!this.isInitialized) {
       await this.initialize();
     }
 
     const { text } = await generateText({
-      model: openai("gpt-4"),
-      system: systemPrompt,
+      model: openai("gpt-4o-mini"),
       prompt: prompt,
     });
 
@@ -49,7 +47,7 @@ export class OpenAIService extends EventEmitter implements AIService {
     }
 
     const { textStream } = await streamText({
-      model: openai("gpt-4"),
+      model: openai("gpt-4o-mini"),
       prompt: text,
     });
 

@@ -17,7 +17,6 @@ export class DeepgramSTTService extends EventEmitter implements STTService {
   }
 
   private onTranscription(text: string): void {
-    console.log("📝 Transcription received:", text);
     this.emit("transcription", text);
   }
 

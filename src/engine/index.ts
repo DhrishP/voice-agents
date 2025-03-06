@@ -104,7 +104,6 @@ class PhoneCall {
       llmEngines[this.id] = llmEngine;
 
       llmEngine.on("chunk", (text: string) => {
-        console.log("🤖 AI response chunk:", text);
         eventBus.emit("call.response.chunk.generated", {
           ctx: {
             callId: this.id,
@@ -138,11 +137,6 @@ class PhoneCall {
       ttsEngines[this.id] = ttsEngine;
 
       ttsEngine.on("chunk", (audioChunk: Buffer) => {
-        console.log("🔊 TTS audio chunk generated:", {
-          size: audioChunk.length,
-          type: audioChunk.constructor.name,
-          firstFewBytes: audioChunk.slice(0, 20).toString("hex"),
-        });
         eventBus.emit("call.audio.chunk.synthesized", {
           ctx: {
             callId: this.id,
@@ -172,11 +166,6 @@ class PhoneCall {
       ttsEngines[this.id] = ttsEngine;
 
       ttsEngine.on("chunk", (audioChunk: Buffer) => {
-        console.log("🔊 TTS audio chunk generated:", {
-          size: audioChunk.length,
-          type: audioChunk.constructor.name,
-          firstFewBytes: audioChunk.slice(0, 20).toString("hex"),
-        });
         eventBus.emit("call.audio.chunk.synthesized", {
           ctx: {
             callId: this.id,
@@ -251,6 +240,7 @@ eventBus.on("call.response.chunk.generated", async (event) => {
   const { ctx, data } = event;
   const engine = ttsEngines[ctx.callId];
   if (engine) {
+    console.log("TTS CHUNK RECD");
     await engine.pipe(data.text);
   } else {
     console.log("⚠️ No TTS engine found for call", ctx.callId);
@@ -262,20 +252,7 @@ eventBus.on("call.audio.chunk.synthesized", async (event) => {
   const engine = telephonyEngines[ctx.callId];
   if (engine) {
     const audioChunk = data.chunk;
-    console.log("🔊 Audio chunk details before sending:", {
-      isBase64:
-        typeof audioChunk === "string" && /^[A-Za-z0-9+/=]+$/.test(audioChunk),
-      type: typeof audioChunk,
-      constructor: audioChunk.constructor.name,
-      size:
-        typeof audioChunk === "string"
-          ? audioChunk.length
-          : (audioChunk as Buffer).length,
-      firstFewBytes:
-        typeof audioChunk === "string"
-          ? audioChunk.slice(0, 20)
-          : Buffer.from(audioChunk).slice(0, 20).toString("hex"),
-    });
+
     await engine.send(audioChunk);
   } else {
     console.log("⚠️ No telephony engine found for call", ctx.callId);
