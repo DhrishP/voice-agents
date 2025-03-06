@@ -1,0 +1,38 @@
+{
+  "name": "voice-agent",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "dependencies": {
+    "@ai-sdk/openai": "^1.2.0",
+    "@deepgram/sdk": "^3.11.2",
+    "ai": "^4.1.52",
+    "bullmq": "^5.1.1",
+    "cross-fetch": "^4.1.0",
+    "dotenv": "^16.4.7",
+    "elevenlabs": "^1.52.0",
+    "express": "^4.18.2",
+    "express-ws": "^5.0.2",
+    "ioredis": "^5.3.2",
+    "ngrok": "^5.0.0-beta.2",
+    "twilio": "^4.23.0",
+    "uuid": "^11.1.0",
+    "websocket-stream": "^5.5.2",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/express-ws": "^3.0.5",
+    "@types/node": "^20.0.0",
+    "@types/ws": "^8.5.14",
+    "nodemon": "^3.0.1",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.7.3"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "nodemon --watch src/**/*.ts --exec ts-node src/index.ts",
+    "watch": "tsc -w"
+  }
+}
