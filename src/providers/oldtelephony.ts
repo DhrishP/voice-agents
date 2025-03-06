@@ -12,6 +12,7 @@ export interface TelephonyProvider {
   cancel(callId: string): Promise<void>;
   onListen(callId: string, callback: (text: string) => void): void;
   shutdown(): Promise<void>;
+  getCallIdFromJobId(jobId: string): Promise<string>;
 } 
 
 export class Telephony implements TelephonyProvider {

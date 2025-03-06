@@ -1,15 +1,16 @@
-import VoiceResponse = require("twilio/lib/twiml/VoiceResponse");
-import { v4 as uuidv4 } from "uuid";
 import twilio from "twilio";
-import dotenv from "dotenv";
-
-dotenv.config();
+import { v4 as uuidv4 } from "uuid";
+import VoiceResponse from "twilio/lib/twiml/VoiceResponse";
+import TwilioProvider from "./provider";
 
 export class Operator {
   private activeCallIds: Set<string> = new Set();
   private twilioClient: twilio.Twilio;
+  private callIdToPhoneCall: Map<string, TwilioProvider> = new Map();
+  private baseUrl: string;
 
   constructor() {
+    this.baseUrl = "";
     const accountSid = process.env.TWILIO_ACCOUNT_SID;
     const authToken = process.env.TWILIO_AUTH_TOKEN;
 
@@ -23,7 +24,6 @@ export class Operator {
   }
 
   public async call(
-    baseApiUrl: string,
     fromNumber: string,
     toNumber: string
   ): Promise<string> {
@@ -33,10 +33,17 @@ export class Operator {
       const call = await this.twilioClient.calls.create({
         from: fromNumber,
         to: toNumber,
-        url: `${baseApiUrl}/twiml/${callId}`,
+        url: `${this.baseUrl}/twiml/${callId}`,
       });
 
       this.activeCallIds.add(callId);
+      const phoneCall = new TwilioProvider();
+      this.callIdToPhoneCall.set(callId, phoneCall);
+
+      console.log(
+        `Call initiated with ID: ${callId}`,
+        this.callIdToPhoneCall.get(callId)
+      );
       return callId;
     } catch (error: any) {
       throw new Error(`Failed to initiate Twilio call: ${error.message}`);
@@ -62,4 +69,31 @@ export class Operator {
     }
     this.activeCallIds.delete(callId);
   }
+
+  public async setWsObject(callId: string, wsObject: any): Promise<void> {
+    if (!this.callIdToPhoneCall.has(callId)) {
+      throw new Error("Invalid call ID");
+    }
+    this.callIdToPhoneCall.get(callId)?.setWsObject(wsObject);
+  }
+
+  public async getPhoneCall(callId: string): Promise<TwilioProvider> {
+    const phoneCall = this.callIdToPhoneCall.get(callId);
+    if (!phoneCall) {
+      throw new Error("Invalid call ID");
+    }
+    return phoneCall;
+  }
+
+  public async getBaseUrl(): Promise<string> {
+    return this.baseUrl;
+  }
+
+  public async setBaseUrl(baseUrl: string): Promise<void> {
+    this.baseUrl = baseUrl;
+  }
 }
+
+const operator = new Operator();
+
+export default operator;

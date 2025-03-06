@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-import { TelephonyProvider } from "./providers/telephony";
+import { Telephony } from "./providers/oldtelephony";
 import { VoiceCallRequest } from "./types/voice-call";
 import twilioServer from "./services/server";
 import STTService from "./providers/stt";
@@ -11,7 +11,7 @@ import ngrok from "ngrok";
 let ngrokUrl: string | null = null;
 
 dotenv.config();
-
+const TelephonyProvider = Telephony;
 async function initialize() {
   const telephonyProvider = TelephonyProvider.getInstance();
   await telephonyProvider.initialize();
@@ -39,14 +39,14 @@ async function exampleVoiceCall() {
         type: "object",
         properties: {
           callStatus: {
-            type: "string"
+            type: "string",
           },
           callDuration: {
-            type: "number"
+            type: "number",
           },
           userResponse: {
-            type: "string"
-          }
+            type: "string",
+          },
         },
       },
     };
@@ -140,7 +140,7 @@ async function initializeTwilioServer() {
   try {
     await ngrok.authtoken(process.env.NGROK_AUTHTOKEN || "");
     ngrokUrl = await ngrok.connect({
-      addr: process.env.TWILIO_SERVER_PORT || 3000,
+      addr: process.env.TWILIO_SERVER_PORT || 5001,
       region: "us",
     });
     console.log("Ngrok tunnel created:", ngrokUrl);
@@ -151,7 +151,7 @@ async function initializeTwilioServer() {
     await twilioServer.start();
     console.log(
       `Twilio server listening on port ${
-        process.env.TWILIO_SERVER_PORT || 3000
+        process.env.TWILIO_SERVER_PORT || 5001
       }`
     );
 

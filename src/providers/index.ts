@@ -1,4 +1,4 @@
-import { TelephonyProvider } from "./telephony";
+import { TelephonyProvider } from "./oldtelephony";
 
 export { TelephonyProvider };
 export { default as STTService } from "./stt";

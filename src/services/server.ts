@@ -12,7 +12,7 @@ export class AgentServer {
 
   private constructor() {
     this.app = expressWs(express()).app;
-    this.port = parseInt(process.env.TWILIO_SERVER_PORT || "3000");
+    this.port = parseInt(process.env.TWILIO_SERVER_PORT || "5001");
 
     this.setupRoutes();
   }

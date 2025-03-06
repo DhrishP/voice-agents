@@ -4,6 +4,9 @@ import expressWs from "express-ws";
 import cors from "cors";
 import morgan from "morgan";
 import Server from "../../types/server";
+import { Job } from "bullmq";
+import { QUEUE_NAMES } from "../../config/worker";
+import { queue } from "../worker";
 
 const app = expressWs(express()).app;
 
@@ -29,6 +32,21 @@ app.use(
     res.status(500).json({ error: "Internal server error" });
   }
 );
+
+app.get("/", (req, res) => {
+  res.send("Hello World");
+});
+
+app.get("/test", (req, res) => {
+  queue.add(QUEUE_NAMES.VOICE_CALL, {
+    fromNumber: "+16692312259",
+    toNumber: "+13025222900",
+    prompt:
+      "Hello! This is a test call from our voice agent. Please say something, and I will respond.",
+    telephonyProvider: "twilio",
+  });
+  res.send("Call initiated");
+});
 
 class Api extends Server {
   public async start(): Promise<void> {
