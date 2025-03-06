@@ -4,7 +4,7 @@ import Server from "../../types/server";
 import express from "express";
 import { createQueueDashExpressMiddleware } from "@queuedash/api";
 import { VoiceCallJobData, VoiceCallJobResult } from "../../types/voice-call";
-import eventBus from "../../engine"
+import eventBus from "../../engine";
 
 // Initialize queue
 const queue = new Queue(QUEUE_NAMES.VOICE_CALL, {
@@ -30,6 +30,8 @@ async function processJob(
       },
       payload: job.data,
     });
+
+    
   } catch (error) {
     console.error(`Error processing job ${job.id}:`, error);
   }
@@ -112,24 +114,10 @@ class PhoneWorker extends Server {
         ctx: {
           queues: [
             {
-              queue: new Queue("report", {
+              queue: new Queue(QUEUE_NAMES.VOICE_CALL, {
                 connection,
               }),
-              displayName: "Reports Processing",
-              type: "bullmq" as any,
-            },
-            {
-              queue: new Queue("work-order", {
-                connection,
-              }),
-              displayName: "Work Order Processing",
-              type: "bullmq" as any,
-            },
-            {
-              queue: new Queue("opendental-work-order", {
-                connection,
-              }),
-              displayName: "OpenDental Work Order Processing",
+              displayName: "Voice Call Processing",
               type: "bullmq" as any,
             },
           ],

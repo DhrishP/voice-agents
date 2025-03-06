@@ -18,12 +18,14 @@ async function initialize() {
   process.on("SIGINT", async () => {
     await api.stop();
     await worker.stop();
+    await twilio.stop();
     process.exit(0);
   });
 
   process.on("SIGTERM", async () => {
     await api.stop();
     await worker.stop();
+    await twilio.stop();
     process.exit(0);
   });
 }

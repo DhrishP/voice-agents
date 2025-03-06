@@ -29,16 +29,9 @@ export class TwilioProvider implements TelephonyProvider {
 
           // test the send, cancel, and hangup functions
           this.test();
-          setTimeout(() => {
-            this.cancel();
-          }, 5000);
-          setTimeout(() => {
-            this.hangup();
-          }, 10000);
         }
 
         if (message.event === "media") {
-
           if (this.listenerCallback) {
             this.listenerCallback(message.media.payload);
           }
@@ -65,6 +58,12 @@ export class TwilioProvider implements TelephonyProvider {
       const audioData = fs.readFileSync("output.mulaw").toString("base64");
       this.send(audioData);
       console.log("Audio sent");
+      setTimeout(() => {
+        this.cancel();
+      }, 5000);
+      setTimeout(() => {
+        this.hangup();
+      }, 10000);
     } catch (error) {
       console.error("Error playing audio file:", error);
     }

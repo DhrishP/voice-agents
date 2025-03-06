@@ -7,7 +7,7 @@ import { VoiceCallJobData } from "../types";
 
 import twilioOperator from "../services/telephony/twillio/operator";
 
-const sstEngines: Record<string, STTProvider> = {};
+const sttEngines: Record<string, STTProvider> = {};
 const ttsEngines: Record<string, TTSProvider> = {};
 const telephonyEngines: Record<string, TelephonyProvider> = {};
 const llmEngines: Record<string, AIProvider> = {};
@@ -71,7 +71,7 @@ eventBus.on("call.initiated", (event) => {
 
 eventBus.on("call.audio.chunk.received", (event) => {
   const { ctx, data } = event;
-  const engine = sstEngines[ctx.callId];
+  const engine = sttEngines[ctx.callId];
   if (engine) {
     engine.pipe(data.chunk);
   } else {

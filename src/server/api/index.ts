@@ -1,10 +1,8 @@
 import express from "express";
 import expressWs from "express-ws";
-
 import cors from "cors";
 import morgan from "morgan";
 import Server from "../../types/server";
-import { Job } from "bullmq";
 import { QUEUE_NAMES } from "../../config/worker";
 import { queue } from "../worker";
 
@@ -40,7 +38,7 @@ app.get("/", (req, res) => {
 app.get("/test", (req, res) => {
   queue.add(QUEUE_NAMES.VOICE_CALL, {
     fromNumber: "+16692312259",
-    toNumber: "+13025222900",
+    toNumber: "+919834153453",
     prompt:
       "Hello! This is a test call from our voice agent. Please say something, and I will respond.",
     telephonyProvider: "twilio",
