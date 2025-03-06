@@ -125,4 +125,3 @@ export class EventBus<T extends EventMap> {
     }
   }
 }
-

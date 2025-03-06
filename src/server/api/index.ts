@@ -42,6 +42,9 @@ app.get("/test", (req, res) => {
     prompt:
       "Hello! This is a test call from our voice agent. Please say something, and I will respond.",
     telephonyProvider: "twilio",
+    sttProvider: "deepgram",
+    ttsProvider: "deepgram",
+    llmProvider: "openai",
   });
   res.send("Call initiated");
 });
