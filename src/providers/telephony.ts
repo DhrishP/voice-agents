@@ -4,7 +4,17 @@ import { VoiceCallRequest, VoiceCallRequestSchema } from "../types/voice-call";
 import twilioService from "../services/telephony/twillio/twilio-service";
 import { convertJsonSchemaToZod } from "../utils/schema";
 
-export class TelephonyProvider {
+export interface TelephonyProvider {
+  initialize(): Promise<void>;
+  makeCall(request: VoiceCallRequest): Promise<string>;
+  send(callId: string, text: string): Promise<void>;
+  hangup(callId: string): Promise<void>;
+  cancel(callId: string): Promise<void>;
+  onListen(callId: string, callback: (text: string) => void): void;
+  shutdown(): Promise<void>;
+} 
+
+export class TelephonyProvider implements TelephonyProvider {
   private static instance: TelephonyProvider;
   private queue: VoiceCallQueue;
   private worker: VoiceCallWorker;
