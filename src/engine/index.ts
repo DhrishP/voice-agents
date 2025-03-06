@@ -1,22 +1,26 @@
 import eventBus from "../events";
-import { AIProvider } from "../providers/ai";
-import { STTProvider } from "../providers/stt";
-import { TelephonyProvider } from "../types/providers/telephony";
-import { TTSProvider } from "../providers/tts";
 import { VoiceCallJobData } from "../types";
-
+import { DeepgramSTTService } from "../services/stt/deepgram";
+import { OpenAIService } from "../services/ai/openai";
+import { DeepgramTTSService } from "../services/tts/deepgram";
+import {
+  AIService,
+  STTService,
+  TTSService,
+  TelephonyProvider,
+} from "../types/providers";
 import twilioOperator from "../services/telephony/twillio/operator";
 
-const sttEngines: Record<string, STTProvider> = {};
-const ttsEngines: Record<string, TTSProvider> = {};
+const sttEngines: Record<string, STTService> = {};
+const ttsEngines: Record<string, TTSService> = {};
 const telephonyEngines: Record<string, TelephonyProvider> = {};
-const llmEngines: Record<string, AIProvider> = {};
+const llmEngines: Record<string, AIService> = {};
 
 class PhoneCall {
   id: string;
-  sttEngine: STTProvider | null;
-  llmEngine: AIProvider | null;
-  ttsEngine: TTSProvider | null;
+  sttEngine: STTService | null;
+  llmEngine: AIService | null;
+  ttsEngine: TTSService | null;
   telephonyEngine: TelephonyProvider | null;
 
   payload: VoiceCallJobData;
@@ -31,8 +35,7 @@ class PhoneCall {
   }
 
   async initialize() {
-    // TODO: Initialize all the engines
-
+    // Initialize Telephony
     if (this.payload.telephonyProvider === "twilio") {
       const callId = await twilioOperator.call(
         this.payload.fromNumber,
@@ -41,12 +44,12 @@ class PhoneCall {
 
       const phoneCall = await twilioOperator.getPhoneCall(callId);
       this.telephonyEngine = phoneCall;
+      telephonyEngines[this.id] = phoneCall;
 
       phoneCall.onListen((chunk) => {
-        console.log("Chunk received", chunk);
         eventBus.emit("call.audio.chunk.received", {
           ctx: {
-            callId,
+            callId: this.id,
             provider: this.payload.telephonyProvider,
             timestamp: Date.now(),
           },
@@ -57,50 +60,175 @@ class PhoneCall {
       throw new Error("Invalid telephony provider");
     }
 
-    // this.sttEngine = new STTProvider();
-    // this.llmEngine = new AIProvider();
-    // this.ttsEngine = new TTSProvider();
+    // Initialize STT
+    if (this.payload.sttProvider === "deepgram") {
+      const sttEngine = new DeepgramSTTService();
+      await sttEngine.initialize();
+
+      this.sttEngine = sttEngine;
+      sttEngines[this.id] = sttEngine;
+
+      sttEngine.on("transcription", (transcript: string) => {
+        console.log("📝 Transcription received:", transcript);
+        eventBus.emit("call.transcription.chunk.created", {
+          ctx: {
+            callId: this.id,
+            provider: this.payload.sttProvider,
+            timestamp: Date.now(),
+          },
+          data: { transcription: transcript },
+        });
+      });
+
+      sttEngine.on("error", (error: Error) => {
+        console.error("❌ STT Error:", error);
+        eventBus.emit("call.error", {
+          ctx: {
+            callId: this.id,
+            provider: this.payload.sttProvider,
+            timestamp: Date.now(),
+          },
+          error,
+        });
+      });
+    } else {
+      throw new Error("Invalid STT provider");
+    }
+
+    const llmEngine = new OpenAIService();
+    await llmEngine.initialize();
+
+    this.llmEngine = llmEngine;
+    llmEngines[this.id] = llmEngine;
+
+    llmEngine.on("chunk", (text: string) => {
+      console.log("🤖 AI response chunk:", text);
+      eventBus.emit("call.response.chunk.generated", {
+        ctx: {
+          callId: this.id,
+          provider: "openai",
+          timestamp: Date.now(),
+        },
+        data: { text },
+      });
+    });
+
+    llmEngine.on("error", (error: Error) => {
+      console.error("❌ LLM Error:", error);
+      eventBus.emit("call.error", {
+        ctx: {
+          callId: this.id,
+          provider: "openai",
+          timestamp: Date.now(),
+        },
+        error,
+      });
+    });
+
+    const ttsEngine = new DeepgramTTSService();
+    await ttsEngine.initialize();
+
+    this.ttsEngine = ttsEngine;
+    ttsEngines[this.id] = ttsEngine;
+
+    ttsEngine.on("chunk", (audioChunk: Buffer) => {
+      console.log("🔊 TTS audio chunk generated");
+      eventBus.emit("call.audio.chunk.synthesized", {
+        ctx: {
+          callId: this.id,
+          provider: "deepgram",
+          timestamp: Date.now(),
+        },
+        data: { chunk: audioChunk.toString("base64") },
+      });
+    });
+
+    ttsEngine.on("error", (error: Error) => {
+      console.error("❌ TTS Error:", error);
+      eventBus.emit("call.error", {
+        ctx: {
+          callId: this.id,
+          provider: "deepgram",
+          timestamp: Date.now(),
+        },
+        error,
+      });
+    });
+  }
+
+  async cleanup() {
+    if (this.sttEngine) {
+      await this.sttEngine.close();
+      delete sttEngines[this.id];
+    }
+    if (this.ttsEngine) {
+      await this.ttsEngine.close();
+      delete ttsEngines[this.id];
+    }
+    if (this.telephonyEngine) {
+      await this.telephonyEngine.hangup();
+      delete telephonyEngines[this.id];
+    }
+    delete llmEngines[this.id];
   }
 }
 
-eventBus.on("call.initiated", (event) => {
+// Event handlers
+eventBus.on("call.initiated", async (event) => {
   const { ctx, payload } = event;
   const engine = new PhoneCall(ctx.callId, payload);
-  engine.initialize();
+  await engine.initialize();
 });
 
-eventBus.on("call.audio.chunk.received", (event) => {
+eventBus.on("call.audio.chunk.received", async (event) => {
   const { ctx, data } = event;
   const engine = sttEngines[ctx.callId];
   if (engine) {
-    engine.pipe(data.chunk);
+    await engine.pipe(data.chunk);
   } else {
-    console.log("No engine found for call", ctx.callId);
+    console.log("⚠️ No STT engine found for call", ctx.callId);
   }
 });
 
-eventBus.on("call.transcription.chunk.created", (event) => {
+eventBus.on("call.transcription.chunk.created", async (event) => {
   const { ctx, data } = event;
   const engine = llmEngines[ctx.callId];
   if (engine) {
-    engine.pipe(data.transcription);
+    await engine.pipe(data.transcription);
+  } else {
+    console.log("⚠️ No LLM engine found for call", ctx.callId);
   }
 });
 
-eventBus.on("call.response.chunk.generated", (event) => {
+eventBus.on("call.response.chunk.generated", async (event) => {
   const { ctx, data } = event;
   const engine = ttsEngines[ctx.callId];
   if (engine) {
-    engine.pipe(data.text);
+    await engine.pipe(data.text);
+  } else {
+    console.log("⚠️ No TTS engine found for call", ctx.callId);
   }
 });
 
-eventBus.on("call.audio.chunk.synthesized", (event) => {
+eventBus.on("call.audio.chunk.synthesized", async (event) => {
   const { ctx, data } = event;
   const engine = telephonyEngines[ctx.callId];
   if (engine) {
-    engine.send(data.chunk);
+    const audioChunk = data.chunk;
+    console.log("🔊 Sending audio chunk to call:", {
+      size: audioChunk.length,
+      type: audioChunk.constructor.name,
+    });
+    await engine.send(audioChunk);
+  } else {
+    console.log("⚠️ No telephony engine found for call", ctx.callId);
   }
+});
+
+eventBus.on("call.ended", async (event) => {
+  const { ctx } = event;
+  const engine = new PhoneCall(ctx.callId, {} as VoiceCallJobData);
+  await engine.cleanup();
 });
 
 export default eventBus;
