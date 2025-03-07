@@ -6,6 +6,7 @@ import { generateText, streamText } from "ai";
 export class OpenAIService extends EventEmitter implements AIService {
   private isInitialized = false;
   private currentResponse: string = "";
+  private listenerCallback: ((chunk: string) => void) | null = null;
 
   constructor() {
     super();
@@ -13,14 +14,10 @@ export class OpenAIService extends EventEmitter implements AIService {
 
   private onChunk(text: string): void {
     this.currentResponse += text;
-    this.emit("chunk", text);
-
-    if (text.match(/[.!?](\s|$)/)) {
-      this.emit("response", this.currentResponse);
-      this.currentResponse = "";
+    if (this.listenerCallback) {
+      this.listenerCallback(text);
     }
   }
-
   async initialize(): Promise<void> {
     if (!process.env.OPENAI_API_KEY) {
       throw new Error("OpenAI API key not found");

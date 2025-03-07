@@ -7,6 +7,7 @@ export class ElevenLabsTTSService extends EventEmitter implements TTSService {
   private isInitialized = false;
   private voiceId = "JBFqnCBsd6RMkjVDRZzb";
   private apiKey: string;
+  private listenerCallback: ((data: Buffer) => void) | null = null;
 
   constructor() {
     super();
@@ -51,8 +52,8 @@ export class ElevenLabsTTSService extends EventEmitter implements TTSService {
       this.ws.on("message", (data: Buffer) => {
         try {
           const message = JSON.parse(data.toString());
-          if (message.audio) {
-            this.emit("chunk", message.audio);
+          if (message.audio && this.listenerCallback) {
+            this.onChunk(message.audio);
           }
         } catch (error) {
           console.error("Failed to parse WebSocket message:", error);
@@ -107,5 +108,9 @@ export class ElevenLabsTTSService extends EventEmitter implements TTSService {
     }
     this.isInitialized = false;
     this.emit("close");
+  }
+
+  public onChunk(callback: (data: Buffer) => void): void {
+    this.listenerCallback = callback;
   }
 }

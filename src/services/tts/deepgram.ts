@@ -6,6 +6,7 @@ export class DeepgramTTSService extends EventEmitter implements TTSService {
   private deepgramClient: any;
   private connection: any = null;
   private isInitialized = false;
+  private listenerCallback: ((data: Buffer) => void) | null = null;
 
   constructor() {
     super();
@@ -16,12 +17,9 @@ export class DeepgramTTSService extends EventEmitter implements TTSService {
   }
 
   private onChunk(data: Buffer): void {
-    console.log("🔊 Audio chunk received:", {
-      size: data.length,
-      type: "PCM16",
-      sampleRate: 8000,
-    });
-    this.emit("chunk", data);
+    if (this.listenerCallback) {
+      this.listenerCallback(data);
+    }
   }
 
   async initialize(): Promise<void> {

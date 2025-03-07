@@ -6,6 +6,7 @@ export class DeepgramSTTService extends EventEmitter implements STTService {
   private deepgramClient: any;
   private connection: any;
   private isInitialized = false;
+  private listenerCallback: ((text: string) => void) | null = null;
 
   constructor() {
     super();
@@ -17,8 +18,12 @@ export class DeepgramSTTService extends EventEmitter implements STTService {
   }
 
   private onTranscription(text: string): void {
-    this.emit("transcription", text);
+    if (this.listenerCallback) {
+      this.listenerCallback(text);
+    }
   }
+
+ 
 
   async initialize(): Promise<void> {
     if (this.isInitialized) return;

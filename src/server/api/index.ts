@@ -39,7 +39,7 @@ app.get("/test", (req, res) => {
   queue.add(QUEUE_NAMES.VOICE_CALL, {
     fromNumber: "+16692312259",
     // toNumber: "+919834153453",
-    toNumber: "+13025222900",
+    toNumber: "+919834153453",
     prompt:
       "Hello! This is a test call from our voice agent. Please say something, and I will respond.",
     telephonyProvider: "twilio",
