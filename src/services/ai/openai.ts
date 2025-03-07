@@ -52,5 +52,7 @@ export class OpenAIService extends EventEmitter implements AIService {
     for await (const chunk of textStream) {
       this.onChunk(chunk);
     }
+
+    this.onChunk("");
   }
 }
