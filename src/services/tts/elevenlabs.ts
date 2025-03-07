@@ -52,8 +52,11 @@ export class ElevenLabsTTSService extends EventEmitter implements TTSService {
       this.ws.on("message", (data: Buffer) => {
         try {
           const message = JSON.parse(data.toString());
-          if (message.audio && this.listenerCallback) {
-            this.onChunk(message.audio);
+          if (message.audio) {
+            if (this.listenerCallback) {
+              this.onChunk(message.audio);
+            }
+            this.emit("chunk", message.audio);
           }
         } catch (error) {
           console.error("Failed to parse WebSocket message:", error);

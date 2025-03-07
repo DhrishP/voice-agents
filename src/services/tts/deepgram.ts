@@ -20,6 +20,7 @@ export class DeepgramTTSService extends EventEmitter implements TTSService {
     if (this.listenerCallback) {
       this.listenerCallback(data);
     }
+    this.emit("chunk", data);
   }
 
   async initialize(): Promise<void> {

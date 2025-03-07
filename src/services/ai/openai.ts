@@ -17,6 +17,7 @@ export class OpenAIService extends EventEmitter implements AIService {
     if (this.listenerCallback) {
       this.listenerCallback(text);
     }
+    this.emit("chunk", text);
   }
   async initialize(): Promise<void> {
     if (!process.env.OPENAI_API_KEY) {

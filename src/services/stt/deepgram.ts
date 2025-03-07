@@ -21,9 +21,8 @@ export class DeepgramSTTService extends EventEmitter implements STTService {
     if (this.listenerCallback) {
       this.listenerCallback(text);
     }
+    this.emit("transcription", text);
   }
-
- 
 
   async initialize(): Promise<void> {
     if (this.isInitialized) return;
