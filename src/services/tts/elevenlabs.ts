@@ -29,7 +29,7 @@ export class ElevenLabsTTSService extends EventEmitter implements TTSService {
       // Create WebSocket connection with query parameters
       this.ws = new WebSocket(
         `wss://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream-input?` +
-          `output_format=ulaw_8000&model_id=eleven_multilingual_v2`
+          `output_format=ulaw_8000&model_id=eleven_multilingual_v2&inactivity_timeout=3600`
       );
 
       // Setup event handlers
