@@ -240,7 +240,6 @@ eventBus.on("call.response.chunk.generated", async (event) => {
   const { ctx, data } = event;
   const engine = ttsEngines[ctx.callId];
   if (engine) {
-    console.log("TTS CHUNK RECD");
     await engine.pipe(data.text);
   } else {
     console.log("⚠️ No TTS engine found for call", ctx.callId);

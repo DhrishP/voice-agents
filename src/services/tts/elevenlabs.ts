@@ -71,9 +71,7 @@ export class ElevenLabsTTSService extends EventEmitter implements TTSService {
 
       this.ws.on("close", () => {
         console.log("WebSocket connection closed");
-        this.isInitialized = false;
-        // Attempt to reconnect
-        setTimeout(() => this.connectWebSocket(), 5000);
+        setTimeout(() => this.connectWebSocket(), 10);
       });
     });
   }
