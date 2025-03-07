@@ -6,6 +6,7 @@
   "dependencies": {
     "@ai-sdk/openai": "^1.2.0",
     "@deepgram/sdk": "^3.11.2",
+    "@prisma/client": "^6.4.1",
     "@queuedash/api": "^3.5.0",
     "@types/cors": "^2.8.17",
     "@types/morgan": "^1.9.9",
@@ -36,6 +37,7 @@
     "@types/node": "^20.0.0",
     "@types/ws": "^8.5.14",
     "nodemon": "^3.0.1",
+    "prisma": "^6.4.1",
     "ts-node": "^10.9.1",
     "typescript": "^5.7.3"
   },
@@ -43,6 +45,10 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "nodemon --watch src/**/*.ts --exec ts-node src/index.ts",
-    "watch": "tsc -w"
+    "watch": "tsc -w",
+    "prisma:generate": "prisma generate --schema=./src/db/schema.prisma",
+    "prisma:migrate": "prisma migrate dev --schema=./src/db/schema.prisma",
+    "prisma:studio": "prisma studio --schema=./src/db/schema.prisma",
+    "prisma:push": "prisma db push --schema=./src/db/schema.prisma"
   }
 }
