@@ -8,5 +8,5 @@ export interface AIService {
   initialize(): Promise<void>;
   generate(systemPrompt: string, prompt: string): Promise<string>;
   pipe(text: string): Promise<void>;
-  on(event: keyof AIEvents, listener: (...args: any[]) => void): void;
+  onChunk(listenerCallback: (text: string) => void): void;
 }

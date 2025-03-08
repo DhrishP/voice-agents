@@ -11,6 +11,7 @@ import {
 } from "../types/providers";
 import twilioOperator from "../services/telephony/twillio/operator";
 import { ElevenLabsTTSService } from "../services/tts/elevenlabs";
+import { SarvamTTSService } from "../services/tts/sarvam";
 
 const sttEngines: Record<string, STTService> = {};
 const ttsEngines: Record<string, TTSService> = {};
@@ -23,8 +24,12 @@ class PhoneCall {
   llmEngine: AIService | null;
   ttsEngine: TTSService | null;
   telephonyEngine: TelephonyProvider | null;
-
   payload: VoiceCallJobData;
+
+  transcription: {
+    from: "agent" | "user";
+    text: string;
+  }[] = [];
 
   constructor(id: string, payload: VoiceCallJobData) {
     this.id = id;
@@ -36,157 +41,56 @@ class PhoneCall {
   }
 
   async initialize() {
-    // Initialize Telephony
     if (this.payload.telephonyProvider === "twilio") {
       const callId = await twilioOperator.call(
+        this.id,
         this.payload.fromNumber,
         this.payload.toNumber
       );
-
       const phoneCall = await twilioOperator.getPhoneCall(callId);
       this.telephonyEngine = phoneCall;
       telephonyEngines[this.id] = phoneCall;
-
-      phoneCall.onListen((chunk) => {
-        eventBus.emit("call.audio.chunk.received", {
-          ctx: {
-            callId: this.id,
-            provider: this.payload.telephonyProvider,
-            timestamp: Date.now(),
-          },
-          data: { chunk, direction: "inbound" },
-        });
-      });
     } else {
       throw new Error("Invalid telephony provider");
     }
 
     // Initialize STT
     if (this.payload.sttProvider === "deepgram") {
-      const sttEngine = new DeepgramSTTService();
+      const sttEngine = new DeepgramSTTService(this.id);
       await sttEngine.initialize();
-
       this.sttEngine = sttEngine;
       sttEngines[this.id] = sttEngine;
-
-      sttEngine.on("transcription", (transcript: string) => {
-        console.log("📝 Transcription received:", transcript);
-        eventBus.emit("call.transcription.chunk.created", {
-          ctx: {
-            callId: this.id,
-            provider: this.payload.sttProvider,
-            timestamp: Date.now(),
-          },
-          data: { transcription: transcript },
-        });
-      });
-
-      sttEngine.on("error", (error: Error) => {
-        console.error("❌ STT Error:", error);
-        eventBus.emit("call.error", {
-          ctx: {
-            callId: this.id,
-            provider: this.payload.sttProvider,
-            timestamp: Date.now(),
-          },
-          error,
-        });
-      });
     } else {
       throw new Error("Invalid STT provider");
     }
 
     if (this.payload.llmProvider === "openai") {
-      const llmEngine = new OpenAIService();
+      const llmEngine = new OpenAIService(this.id);
       await llmEngine.initialize();
 
       this.llmEngine = llmEngine;
       llmEngines[this.id] = llmEngine;
-
-      llmEngine.on("chunk", (text: string) => {
-        eventBus.emit("call.response.chunk.generated", {
-          ctx: {
-            callId: this.id,
-            provider: "openai",
-            timestamp: Date.now(),
-          },
-          data: { text },
-        });
-      });
-
-      llmEngine.on("error", (error: Error) => {
-        console.error("❌ LLM Error:", error);
-        eventBus.emit("call.error", {
-          ctx: {
-            callId: this.id,
-            provider: "openai",
-            timestamp: Date.now(),
-          },
-          error,
-        });
-      });
     } else {
       throw new Error("Invalid LLM provider");
     }
 
     if (this.payload.ttsProvider === "deepgram") {
-      const ttsEngine = new DeepgramTTSService();
+      const ttsEngine = new DeepgramTTSService(this.id);
       await ttsEngine.initialize();
-
       this.ttsEngine = ttsEngine;
       ttsEngines[this.id] = ttsEngine;
-
-      ttsEngine.on("chunk", (audioChunk: Buffer) => {
-        eventBus.emit("call.audio.chunk.synthesized", {
-          ctx: {
-            callId: this.id,
-            provider: "deepgram",
-            timestamp: Date.now(),
-          },
-          data: { chunk: audioChunk.toString("base64") },
-        });
-      });
-
-      ttsEngine.on("error", (error: Error) => {
-        console.error("❌ TTS Error:", error);
-        eventBus.emit("call.error", {
-          ctx: {
-            callId: this.id,
-            provider: "deepgram",
-            timestamp: Date.now(),
-          },
-          error,
-        });
-      });
     } else if (this.payload.ttsProvider === "elevenlabs") {
-      const ttsEngine = new ElevenLabsTTSService();
+      const ttsEngine = new ElevenLabsTTSService(this.id);
       await ttsEngine.initialize();
 
       this.ttsEngine = ttsEngine;
       ttsEngines[this.id] = ttsEngine;
+    } else if (this.payload.ttsProvider === "sarvam") {
+      const ttsEngine = new SarvamTTSService(this.id);
+      await ttsEngine.initialize();
 
-      ttsEngine.on("chunk", (audioChunk: Buffer) => {
-        eventBus.emit("call.audio.chunk.synthesized", {
-          ctx: {
-            callId: this.id,
-            provider: "elevenlabs",
-            timestamp: Date.now(),
-          },
-          data: { chunk: audioChunk.toString("base64") },
-        });
-      });
-
-      ttsEngine.on("error", (error: Error) => {
-        console.error("❌ TTS Error:", error);
-        eventBus.emit("call.error", {
-          ctx: {
-            callId: this.id,
-            provider: "elevenlabs",
-            timestamp: Date.now(),
-          },
-          error,
-        });
-      });
+      this.ttsEngine = ttsEngine;
+      ttsEngines[this.id] = ttsEngine;
     } else {
       throw new Error("Invalid TTS provider");
     }
@@ -229,10 +133,16 @@ eventBus.on("call.audio.chunk.received", async (event) => {
 eventBus.on("call.transcription.chunk.created", async (event) => {
   const { ctx, data } = event;
   const engine = llmEngines[ctx.callId];
+  const telephonyEngine = telephonyEngines[ctx.callId];
+
   if (engine) {
     await engine.pipe(data.transcription);
   } else {
     console.log("⚠️ No LLM engine found for call", ctx.callId);
+  }
+
+  if (telephonyEngine) {
+    await telephonyEngine.cancel();
   }
 });
 

@@ -1,15 +1,17 @@
 import { createClient, LiveTranscriptionEvents } from "@deepgram/sdk";
 import { EventEmitter } from "events";
 import { STTEvents, STTService } from "../../types/providers/stt";
+import eventBus from "../../engine";
 
-export class DeepgramSTTService extends EventEmitter implements STTService {
+export class DeepgramSTTService implements STTService {
   private deepgramClient: any;
   private connection: any;
   private isInitialized = false;
   private listenerCallback: ((text: string) => void) | null = null;
+  private id: string;
 
-  constructor() {
-    super();
+  constructor(id: string) {
+    this.id = id;
     const apiKey = process.env.DEEPGRAM_API_KEY;
     if (!apiKey) {
       throw new Error("DEEPGRAM_API_KEY is required in environment variables");
@@ -17,11 +19,8 @@ export class DeepgramSTTService extends EventEmitter implements STTService {
     this.deepgramClient = createClient(apiKey);
   }
 
-  private onTranscription(text: string): void {
-    if (this.listenerCallback) {
-      this.listenerCallback(text);
-    }
-    this.emit("transcription", text);
+  onTranscription(listenerCallback: (text: string) => void): void {
+    this.listenerCallback = listenerCallback;
   }
 
   async initialize(): Promise<void> {
@@ -39,13 +38,22 @@ export class DeepgramSTTService extends EventEmitter implements STTService {
       this.connection.on(LiveTranscriptionEvents.Transcript, (data: any) => {
         const transcript = data.channel?.alternatives[0]?.transcript;
         if (transcript && transcript.trim()) {
-          this.onTranscription(transcript);
+          if (this.listenerCallback) {
+            this.listenerCallback(transcript);
+          }
+          eventBus.emit("call.transcription.chunk.created", {
+            ctx: {
+              callId: this.id,
+              provider: "deepgram",
+              timestamp: Date.now(),
+            },
+            data: { transcription: transcript },
+          });
         }
       });
 
       this.connection.on(LiveTranscriptionEvents.Error, (error: any) => {
         console.error("❌ Deepgram STT Error:", error);
-        this.emit("error", error);
       });
 
       this.connection.on(LiveTranscriptionEvents.Open, () => {
@@ -72,7 +80,6 @@ export class DeepgramSTTService extends EventEmitter implements STTService {
       this.connection.send(Buffer.from(chunk, "base64"));
     } catch (error) {
       console.error("❌ Error processing audio chunk:", error);
-      this.emit("error", error as Error);
     }
   }
 

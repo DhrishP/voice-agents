@@ -2,14 +2,18 @@ import WebSocket from "ws";
 import fs from "fs";
 import { TelephonyProvider } from "../../../types/providers/telephony";
 import { mulaw } from "alawmulaw";
+import eventBus from "../../../engine";
 
 export class TwilioProvider implements TelephonyProvider {
   private ws: WebSocket | null = null;
   private listenerCallback: ((chunk: string) => void) | null = null;
   private isStarted: boolean = false;
   private sid: string | null = null;
+  private id: string;
 
-  constructor() {}
+  constructor(id: string) {
+    this.id = id;
+  }
 
   setWsObject(ws: WebSocket) {
     this.ws = ws;
@@ -33,6 +37,14 @@ export class TwilioProvider implements TelephonyProvider {
           if (this.listenerCallback) {
             this.listenerCallback(message.media.payload);
           }
+          eventBus.emit("call.audio.chunk.received", {
+            ctx: {
+              callId: this.id,
+              provider: "twilio",
+              timestamp: Date.now(),
+            },
+            data: { chunk: message.media.payload, direction: "inbound" },
+          });
         }
       } catch (error) {
         console.error("Error processing WebSocket message:", error);

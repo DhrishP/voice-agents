@@ -24,10 +24,11 @@ export class Operator {
   }
 
   public async call(
+    id: string,
     fromNumber: string,
     toNumber: string
   ): Promise<string> {
-    const callId = uuidv4();
+    const callId = id;
 
     try {
       const call = await this.twilioClient.calls.create({
@@ -37,7 +38,7 @@ export class Operator {
       });
 
       this.activeCallIds.add(callId);
-      const phoneCall = new TwilioProvider();
+      const phoneCall = new TwilioProvider(callId);
       this.callIdToPhoneCall.set(callId, phoneCall);
 
       console.log(

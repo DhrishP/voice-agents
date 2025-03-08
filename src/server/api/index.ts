@@ -6,6 +6,7 @@ import Server from "../../types/server";
 import { QUEUE_NAMES } from "../../config/worker";
 import { queue } from "../worker";
 import { Job } from "bullmq";
+import { v4 } from "uuid";
 
 const app = expressWs(express()).app;
 
@@ -35,9 +36,9 @@ app.get("/", (req, res) => {
 
 app.get("/test", (req, res) => {
   queue.add(QUEUE_NAMES.VOICE_CALL, {
-    fromNumber: "+16692312259",
-    // toNumber: "+919834153453",
-    toNumber: "+919834153453",
+    callId: v4(),
+    fromNumber: process.env.FROM_NUMBER,
+    toNumber: process.env.TO_NUMBER,
     prompt:
       "Hello! This is a test call from our voice agent. Please say something, and I will respond.",
     telephonyProvider: "twilio",

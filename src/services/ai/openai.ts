@@ -2,23 +2,22 @@ import { EventEmitter } from "events";
 import { AIEvents, AIService } from "../../types/providers/ai";
 import { openai } from "@ai-sdk/openai";
 import { generateText, streamText } from "ai";
+import eventBus from "../../engine";
 
-export class OpenAIService extends EventEmitter implements AIService {
+export class OpenAIService implements AIService {
   private isInitialized = false;
   private currentResponse: string = "";
   private listenerCallback: ((chunk: string) => void) | null = null;
+  private id: string;
 
-  constructor() {
-    super();
+  constructor(id: string) {
+    this.id = id;
   }
 
-  private onChunk(text: string): void {
-    this.currentResponse += text;
-    if (this.listenerCallback) {
-      this.listenerCallback(text);
-    }
-    this.emit("chunk", text);
+   onChunk(listenerCallback: (chunk: string) => void): void {
+    this.listenerCallback = listenerCallback;
   }
+
   async initialize(): Promise<void> {
     if (!process.env.OPENAI_API_KEY) {
       throw new Error("OpenAI API key not found");
@@ -50,9 +49,26 @@ export class OpenAIService extends EventEmitter implements AIService {
     });
 
     for await (const chunk of textStream) {
-      this.onChunk(chunk);
+      if (this.listenerCallback) {
+        this.listenerCallback(chunk);
+      }
+      eventBus.emit("call.response.chunk.generated", {
+        ctx: {
+          callId: this.id,
+          provider: "openai",
+          timestamp: Date.now(),
+        },
+        data: { text: chunk },
+      });
     }
 
-    this.onChunk("");
+    eventBus.emit("call.response.chunk.generated", {
+      ctx: {
+        callId: this.id,
+        provider: "openai",
+        timestamp: Date.now(),
+      },
+      data: { text: "" },
+    });
   }
 }

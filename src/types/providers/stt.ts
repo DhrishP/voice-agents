@@ -7,5 +7,5 @@ export interface STTService {
   initialize(): Promise<void>;
   pipe(chunk: string): Promise<void>;
   close(): Promise<void>;
-  on(event: keyof STTEvents, listener: (...args: any[]) => void): void;
+  onTranscription(listenerCallback: (text: string) => void): void;
 }

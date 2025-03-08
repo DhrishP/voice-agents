@@ -6,8 +6,7 @@ export interface TTSEvents {
 
 export interface TTSService {
   initialize(): Promise<void>;
-  generate(text: string): Promise<string>;
   pipe(text: string): Promise<void>;
   close(): Promise<void>;
-  on(event: keyof TTSEvents, listener: (...args: any[]) => void): void;
+  onChunk(listenerCallback: (data: Buffer) => void): void;
 }

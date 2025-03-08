@@ -1,17 +1,17 @@
 import { EventEmitter } from "events";
 import { TTSEvents, TTSService } from "../../types/providers/tts";
 import WebSocket from "ws";
-
-export class ElevenLabsTTSService extends EventEmitter implements TTSService {
+import eventBus from "../../engine";
+export class ElevenLabsTTSService implements TTSService {
   private ws: WebSocket | null = null;
   private isInitialized = false;
   private voiceId = "JBFqnCBsd6RMkjVDRZzb";
   private apiKey: string;
   private listenerCallback: ((data: Buffer) => void) | null = null;
+  private id: string;
 
-  constructor() {
-    super();
-
+  constructor(id: string) {
+    this.id = id;
     this.apiKey = process.env.ELEVENLABS_API_KEY || "";
   }
 
@@ -56,7 +56,14 @@ export class ElevenLabsTTSService extends EventEmitter implements TTSService {
             if (this.listenerCallback) {
               this.onChunk(message.audio);
             }
-            this.emit("chunk", message.audio);
+            eventBus.emit("call.audio.chunk.synthesized", {
+              ctx: {
+                callId: this.id,
+                provider: "elevenlabs",
+                timestamp: Date.now(),
+              },
+              data: { chunk: message.audio.toString("base64") },
+            });
           }
         } catch (error) {
           console.error("Failed to parse WebSocket message:", error);
@@ -65,7 +72,6 @@ export class ElevenLabsTTSService extends EventEmitter implements TTSService {
 
       this.ws.on("error", (error) => {
         console.error("WebSocket error:", error);
-        this.emit("error", error);
         reject(error);
       });
 
@@ -93,7 +99,6 @@ export class ElevenLabsTTSService extends EventEmitter implements TTSService {
       return text;
     } catch (error) {
       console.error("Error in ElevenLabs TTS:", error);
-      this.emit("error", error as Error);
       throw error;
     }
   }
@@ -108,10 +113,9 @@ export class ElevenLabsTTSService extends EventEmitter implements TTSService {
       this.ws = null;
     }
     this.isInitialized = false;
-    this.emit("close");
   }
 
-  public onChunk(callback: (data: Buffer) => void): void {
-    this.listenerCallback = callback;
+  public onChunk(listenerCallback: (data: Buffer) => void): void {
+    this.listenerCallback = listenerCallback;
   }
 }

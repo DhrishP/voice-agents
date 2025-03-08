@@ -1,26 +1,25 @@
 import { EventEmitter } from "events";
 import { TTSEvents, TTSService } from "../../types/providers/tts";
 import { createClient, LiveTTSEvents } from "@deepgram/sdk";
+import eventBus from "../../engine";
 
-export class DeepgramTTSService extends EventEmitter implements TTSService {
+export class DeepgramTTSService implements TTSService {
   private deepgramClient: any;
   private connection: any = null;
   private isInitialized = false;
   private listenerCallback: ((data: Buffer) => void) | null = null;
+  private id: string;
 
-  constructor() {
-    super();
+  constructor(id: string) {
+    this.id = id;
     if (!process.env.DEEPGRAM_API_KEY) {
       throw new Error("DEEPGRAM_API_KEY is required in environment variables");
     }
     this.deepgramClient = createClient(process.env.DEEPGRAM_API_KEY);
   }
 
-  private onChunk(data: Buffer): void {
-    if (this.listenerCallback) {
-      this.listenerCallback(data);
-    }
-    this.emit("chunk", data);
+  onChunk(listenerCallback: (data: Buffer) => void): void {
+    this.listenerCallback = listenerCallback;
   }
 
   async initialize(): Promise<void> {
@@ -39,18 +38,26 @@ export class DeepgramTTSService extends EventEmitter implements TTSService {
       });
 
       this.connection.on(LiveTTSEvents.Audio, (data: Buffer) => {
-        this.onChunk(data);
+        if (this.listenerCallback) {
+          this.listenerCallback(data);
+        }
+        eventBus.emit("call.audio.chunk.synthesized", {
+          ctx: {
+            callId: this.id,
+            provider: "deepgram",
+            timestamp: Date.now(),
+          },
+          data: { chunk: data.toString("base64") },
+        });
       });
 
       this.connection.on(LiveTTSEvents.Error, (error: Error) => {
         console.error("❌ Deepgram TTS Error:", error);
-        this.emit("error", error);
       });
 
       this.connection.on(LiveTTSEvents.Close, () => {
         console.log("🎙️ Deepgram TTS: Connection closed");
         this.isInitialized = false;
-        this.emit("close");
       });
 
       // Wait for connection to be ready
@@ -86,7 +93,6 @@ export class DeepgramTTSService extends EventEmitter implements TTSService {
       return text;
     } catch (error) {
       console.error("❌ Error processing text:", error);
-      this.emit("error", error as Error);
       throw error;
     }
   }
