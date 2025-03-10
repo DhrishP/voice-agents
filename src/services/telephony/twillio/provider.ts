@@ -4,7 +4,7 @@ import { TelephonyProvider } from "../../../types/providers/telephony";
 import { mulaw } from "alawmulaw";
 import eventBus from "../../../engine";
 import twilio from "twilio";
-
+import { VoiceCallJobData } from "../../../types/voice-call";
 export class TwilioProvider implements TelephonyProvider {
   private ws: WebSocket | null = null;
   private listenerCallback: ((chunk: string) => void) | null = null;
@@ -29,11 +29,11 @@ export class TwilioProvider implements TelephonyProvider {
     }
   }
 
-  async validateInput(payload: {
-    fromNumber: string;
-    toNumber: string;
-  }): Promise<boolean> {
+  async validateInput(payload: VoiceCallJobData): Promise<boolean> {
     try {
+      if (!payload.toNumber || !payload.prompt) {
+        return false;
+      }
       const incomingPhoneNumbers =
         await TwilioProvider.twilioClient.incomingPhoneNumbers.list();
 
@@ -41,9 +41,7 @@ export class TwilioProvider implements TelephonyProvider {
         (number) => number.phoneNumber === payload.fromNumber
       );
       if (!hasNumber) {
-        throw new Error(
-          `Phone number ${payload.fromNumber} is not available in your Twilio account`
-        );
+        return false;
       }
 
       return true;

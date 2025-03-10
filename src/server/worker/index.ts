@@ -23,10 +23,11 @@ async function processJob(job: Job<VoiceCallJobData>): Promise<void> {
 
     if (job.data.telephonyProvider === "twilio") {
       const provider = new TwilioProvider(job.data.callId || "");
-      await provider.validateInput({
-        fromNumber: job.data.fromNumber,
-        toNumber: job.data.toNumber,
-      });
+      const isValid = await provider.validateInput(job.data);
+
+      if (!isValid) {
+        throw new Error("Invalid phone number");
+      }
     }
 
     eventBus.emit("call.initiated", {

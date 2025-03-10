@@ -1,7 +1,7 @@
 import { EventEmitter } from "events";
 import { AIEvents, AIService } from "../../types/providers/ai";
 import { openai } from "@ai-sdk/openai";
-import { generateText, streamText } from "ai";
+import { CoreMessage, generateText, streamText } from "ai";
 import eventBus from "../../engine";
 
 export class OpenAIService implements AIService {
@@ -9,12 +9,13 @@ export class OpenAIService implements AIService {
   private currentResponse: string = "";
   private listenerCallback: ((chunk: string) => void) | null = null;
   private id: string;
-
-  constructor(id: string) {
+  private history: CoreMessage[];
+  constructor(id: string, history: CoreMessage[]) {
     this.id = id;
+    this.history = history;
   }
 
-   onChunk(listenerCallback: (chunk: string) => void): void {
+  onChunk(listenerCallback: (chunk: string) => void): void {
     this.listenerCallback = listenerCallback;
   }
 
@@ -43,15 +44,24 @@ export class OpenAIService implements AIService {
       await this.initialize();
     }
 
+    let fullResponse = "";
+
+    this.history.push({ role: "user", content: text });
+
+    console.log("History:", this.history);
+
     const { textStream } = await streamText({
       model: openai("gpt-4o-mini"),
-      prompt: text,
+      messages: this.history,
     });
 
     for await (const chunk of textStream) {
       if (this.listenerCallback) {
         this.listenerCallback(chunk);
       }
+
+      fullResponse += chunk;
+
       eventBus.emit("call.response.chunk.generated", {
         ctx: {
           callId: this.id,
@@ -61,6 +71,8 @@ export class OpenAIService implements AIService {
         data: { text: chunk },
       });
     }
+
+    this.history.push({ role: "assistant", content: fullResponse });
 
     eventBus.emit("call.response.chunk.generated", {
       ctx: {

@@ -12,6 +12,7 @@ import {
 import twilioOperator from "../services/telephony/twillio/operator";
 import { ElevenLabsTTSService } from "../services/tts/elevenlabs";
 import { SarvamTTSService } from "../services/tts/sarvam";
+import { CoreMessage } from "ai";
 
 const sttEngines: Record<string, STTService> = {};
 const ttsEngines: Record<string, TTSService> = {};
@@ -25,6 +26,7 @@ class PhoneCall {
   ttsEngine: TTSService | null;
   telephonyEngine: TelephonyProvider | null;
   payload: VoiceCallJobData;
+  history: CoreMessage[] = [];
 
   transcription: {
     from: "agent" | "user";
@@ -38,6 +40,12 @@ class PhoneCall {
     this.ttsEngine = null;
     this.telephonyEngine = null;
     this.payload = payload;
+    this.history = [
+      {
+        role: "assistant",
+        content: this.payload.prompt,
+      },
+    ];
   }
 
   async initialize() {
@@ -65,7 +73,7 @@ class PhoneCall {
     }
 
     if (this.payload.llmProvider === "openai") {
-      const llmEngine = new OpenAIService(this.id);
+      const llmEngine = new OpenAIService(this.id, this.history);
       await llmEngine.initialize();
 
       this.llmEngine = llmEngine;
