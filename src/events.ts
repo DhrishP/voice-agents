@@ -35,6 +35,16 @@ interface AppEvents extends EventMap {
       chunk: Buffer | string;
     };
   };
+
+  "call.ended": {
+    ctx: { callId: string };
+    data: any;
+  };
+
+  "call.error": {
+    ctx: { callId: string };
+    error: Error;
+  };
 }
 
 const eventBus = EventBus.getInstance<AppEvents>();
