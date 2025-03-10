@@ -9,9 +9,11 @@ export class DeepgramSTTService implements STTService {
   private isInitialized = false;
   private listenerCallback: ((text: string) => void) | null = null;
   private id: string;
+  private language: string;
 
-  constructor(id: string) {
+  constructor(id: string, language: string = "en-US") {
     this.id = id;
+    this.language = language;
     const apiKey = process.env.DEEPGRAM_API_KEY;
     if (!apiKey) {
       throw new Error("DEEPGRAM_API_KEY is required in environment variables");
@@ -29,7 +31,7 @@ export class DeepgramSTTService implements STTService {
     try {
       this.connection = this.deepgramClient.listen.live({
         model: "nova-2",
-        language: "en-US",
+        language: this.language === "hi" ? "hi" : "en-US",
         encoding: "mulaw",
         sample_rate: 8000,
         channels: 1,

@@ -1,17 +1,20 @@
-import { EventEmitter } from "events";
-import { TTSEvents, TTSService } from "../../types/providers/tts";
+import { TTSService } from "../../types/providers/tts";
 import WebSocket from "ws";
 import eventBus from "../../engine";
 export class ElevenLabsTTSService implements TTSService {
   private ws: WebSocket | null = null;
   private isInitialized = false;
-  private voiceId = "JBFqnCBsd6RMkjVDRZzb";
+  private voiceId: string;
   private apiKey: string;
   private listenerCallback: ((data: Buffer) => void) | null = null;
   private id: string;
+  private language: string;
 
-  constructor(id: string) {
+  constructor(id: string, language: string = "en-US") {
     this.id = id;
+    this.language = language;
+    this.voiceId =
+      this.language === "hi" ? "Sxk6njaoa7XLsAFT7WcN" : "JBFqnCBsd6RMkjVDRZzb";
     this.apiKey = process.env.ELEVENLABS_API_KEY || "";
   }
 
@@ -26,15 +29,12 @@ export class ElevenLabsTTSService implements TTSService {
 
   private async connectWebSocket(): Promise<void> {
     return new Promise((resolve, reject) => {
-      // Create WebSocket connection with query parameters
       this.ws = new WebSocket(
         `wss://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream-input?` +
           `output_format=ulaw_8000&model_id=eleven_multilingual_v2&inactivity_timeout=3600`
       );
 
-      // Setup event handlers
       this.ws.on("open", () => {
-        // Send initial configuration
         this.ws?.send(
           JSON.stringify({
             text: " ",
@@ -88,11 +88,11 @@ export class ElevenLabsTTSService implements TTSService {
     }
 
     try {
-      // Send the text to be converted
       this.ws?.send(
         JSON.stringify({
           text: text,
           try_trigger_generation: true,
+          language: this.language === "hi" ? "hi" : "en-US",
         })
       );
 

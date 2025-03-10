@@ -19,6 +19,7 @@ export const VoiceCallRequestSchema = z.object({
   ttsModel: z.string().default("eleven_turbo_v2_5"),
   sttProvider: z.string().default("deepgram"),
   sttModel: z.string().default("whisper_1"),
+  language: z.enum(["en", "hi"]).default("en"),
   callId: z.string().optional(),
 });
 

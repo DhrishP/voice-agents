@@ -9,9 +9,11 @@ export class DeepgramTTSService implements TTSService {
   private isInitialized = false;
   private listenerCallback: ((data: Buffer) => void) | null = null;
   private id: string;
+  private language: string;
 
-  constructor(id: string) {
+  constructor(id: string, language: string = "en-US") {
     this.id = id;
+    this.language = language;
     if (!process.env.DEEPGRAM_API_KEY) {
       throw new Error("DEEPGRAM_API_KEY is required in environment variables");
     }
@@ -27,7 +29,7 @@ export class DeepgramTTSService implements TTSService {
 
     try {
       this.connection = this.deepgramClient.speak.live({
-        model: "aura-asteria-en",
+        model: this.language === "hi" ? "aura-asteria-hi" : "aura-asteria-en",
         encode: "mulaw",
         sampleRate: 8000,
       });
