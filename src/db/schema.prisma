@@ -37,7 +37,7 @@ model Call {
   recordingUrl           String?
   recordingDuration      Int?
   errorReason            String?
-  
+  language               String @default("en-US")
 
   @@map("calls")         
 }

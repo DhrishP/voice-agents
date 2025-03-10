@@ -1,4 +1,3 @@
-import { EventEmitter } from "events";
 import { AIEvents, AIService } from "../../types/providers/ai";
 import { openai } from "@ai-sdk/openai";
 import { CoreMessage, generateText, streamText } from "ai";

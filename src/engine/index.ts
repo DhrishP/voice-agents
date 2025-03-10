@@ -63,6 +63,7 @@ class PhoneCall {
           transcript_without_tools: "",
           transcript_with_tools: "",
           summary: "",
+          language: this.payload.language || "en-US",
         },
       });
     } catch (error) {
@@ -87,7 +88,10 @@ class PhoneCall {
 
     // Initialize STT
     if (this.payload.sttProvider === "deepgram") {
-      const sttEngine = new DeepgramSTTService(this.id);
+      const sttEngine = new DeepgramSTTService(
+        this.id,
+        this.payload.language || "en-US"
+      );
       await sttEngine.initialize();
       this.sttEngine = sttEngine;
       sttEngines[this.id] = sttEngine;
@@ -106,12 +110,18 @@ class PhoneCall {
     }
 
     if (this.payload.ttsProvider === "deepgram") {
-      const ttsEngine = new DeepgramTTSService(this.id);
+      const ttsEngine = new DeepgramTTSService(
+        this.id,
+        this.payload.language || "en-US"
+      );
       await ttsEngine.initialize();
       this.ttsEngine = ttsEngine;
       ttsEngines[this.id] = ttsEngine;
     } else if (this.payload.ttsProvider === "elevenlabs") {
-      const ttsEngine = new ElevenLabsTTSService(this.id);
+      const ttsEngine = new ElevenLabsTTSService(
+        this.id,
+        this.payload.language || "en-US"
+      );
       await ttsEngine.initialize();
 
       this.ttsEngine = ttsEngine;

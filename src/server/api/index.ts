@@ -35,16 +35,17 @@ app.get("/", (req, res) => {
 });
 
 app.get("/test", (req, res) => {
-  queue.add(QUEUE_NAMES.VOICE_CALL, { 
+  queue.add(QUEUE_NAMES.VOICE_CALL, {
     callId: v4(),
     fromNumber: process.env.FROM_NUMBER,
     toNumber: process.env.TO_NUMBER,
     prompt:
-      "You are a voice agent. You will talk to the user and help them with their questions.",
+      "You are a voice agent. You will talk to the user and help them with their question in the language of the user.",
     telephonyProvider: "twilio",
     sttProvider: "deepgram",
     ttsProvider: "elevenlabs",
     llmProvider: "openai",
+    language: "hi",
   });
   res.send("Call initiated");
 });
