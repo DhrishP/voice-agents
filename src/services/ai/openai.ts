@@ -3,7 +3,7 @@ import { AIEvents, AIService } from "../../types/providers/ai";
 import { openai } from "@ai-sdk/openai";
 import { CoreMessage, generateText, streamText } from "ai";
 import eventBus from "../../engine";
-
+import prisma from "../../db/client";
 export class OpenAIService implements AIService {
   private isInitialized = false;
   private currentResponse: string = "";
@@ -45,12 +45,20 @@ export class OpenAIService implements AIService {
     }
 
     let fullResponse = "";
+    let tokensUsed = 0;
 
     this.history.push({ role: "user", content: text });
 
+    await prisma.call.update({
+      where: { id: this.id },
+      data: {
+        transcript_without_tools: JSON.stringify(this.history),
+      },
+    });
+
     console.log("History:", this.history);
 
-    const { textStream } = await streamText({
+    const { textStream, usage } = await streamText({
       model: openai("gpt-4o-mini"),
       messages: this.history,
     });
@@ -71,8 +79,17 @@ export class OpenAIService implements AIService {
         data: { text: chunk },
       });
     }
+    tokensUsed = (await usage).totalTokens;
 
     this.history.push({ role: "assistant", content: fullResponse });
+
+    await prisma.call.update({
+      where: { id: this.id },
+      data: {
+        transcript_without_tools: JSON.stringify(this.history),
+        tokensUsed,
+      },
+    });
 
     eventBus.emit("call.response.chunk.generated", {
       ctx: {

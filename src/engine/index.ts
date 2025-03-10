@@ -13,6 +13,7 @@ import twilioOperator from "../services/telephony/twillio/operator";
 import { ElevenLabsTTSService } from "../services/tts/elevenlabs";
 import { SarvamTTSService } from "../services/tts/sarvam";
 import { CoreMessage } from "ai";
+import prisma from "../db/client";
 
 const sttEngines: Record<string, STTService> = {};
 const ttsEngines: Record<string, TTSService> = {};
@@ -46,6 +47,28 @@ class PhoneCall {
         content: this.payload.prompt,
       },
     ];
+  }
+
+  public async initializeCallRecord() {
+    try {
+      await prisma.call.create({
+        data: {
+          id: this.id,
+          status: "INITIATED",
+          prompt: this.payload.prompt,
+          telephonyProvider: this.payload.telephonyProvider,
+          llmProvider: this.payload.llmProvider,
+          sttProvider: this.payload.sttProvider,
+          ttsProvider: this.payload.ttsProvider,
+          transcript_without_tools: "",
+          transcript_with_tools: "",
+          summary: "",
+        },
+      });
+    } catch (error) {
+      console.error("Failed to create call record:", error);
+      throw error;
+    }
   }
 
   async initialize() {
@@ -125,7 +148,19 @@ class PhoneCall {
 eventBus.on("call.initiated", async (event) => {
   const { ctx, payload } = event;
   const engine = new PhoneCall(ctx.callId, payload);
+
+  await engine.initializeCallRecord();
+
   await engine.initialize();
+
+  try {
+    await prisma.call.update({
+      where: { id: ctx.callId },
+      data: { status: "IN_PROGRESS" },
+    });
+  } catch (error) {
+    console.error("Failed to update call status:", error);
+  }
 });
 
 eventBus.on("call.audio.chunk.received", async (event) => {
@@ -157,6 +192,7 @@ eventBus.on("call.transcription.chunk.created", async (event) => {
 eventBus.on("call.response.chunk.generated", async (event) => {
   const { ctx, data } = event;
   const engine = ttsEngines[ctx.callId];
+
   if (engine) {
     await engine.pipe(data.text);
   } else {
@@ -177,9 +213,37 @@ eventBus.on("call.audio.chunk.synthesized", async (event) => {
 });
 
 eventBus.on("call.ended", async (event) => {
-  const { ctx } = event;
+  const { ctx, data } = event;
   const engine = new PhoneCall(ctx.callId, {} as VoiceCallJobData);
+
+  try {
+    await prisma.call.update({
+      where: { id: ctx.callId },
+      data: {
+        status: "COMPLETED",
+      },
+    });
+  } catch (error) {
+    console.error("Failed to update call completion:", error);
+  }
+
   await engine.cleanup();
+});
+
+eventBus.on("call.error", async (event) => {
+  const { ctx, error } = event;
+
+  try {
+    await prisma.call.update({
+      where: { id: ctx.callId },
+      data: {
+        status: "FAILED",
+        errorReason: error.message,
+      },
+    });
+  } catch (dbError) {
+    console.error("Failed to update call error status:", dbError);
+  }
 });
 
 export default eventBus;
