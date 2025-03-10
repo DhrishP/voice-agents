@@ -1,7 +1,5 @@
-
 generator client {
   provider = "prisma-client-js"
-  output = "./src/db"
 }
 
 datasource db {
@@ -20,6 +18,7 @@ enum CallStatus {
 model Call {
   id                      String      @id @default(uuid())
   createdAt              DateTime    @default(now())
+  updatedAt              DateTime    @updatedAt
   status                 CallStatus
   prompt                 String     
   telephonyProvider      String
@@ -34,6 +33,11 @@ model Call {
   transcript_without_tools String    
   transcript_with_tools    String    
   summary                 String   
+  tokensUsed                 Int?
+  recordingUrl           String?
+  recordingDuration      Int?
+  errorReason            String?
+  
 
   @@map("calls")         
 }
