@@ -82,12 +82,14 @@ export class OpenAIService implements AIService {
     tokensUsed = (await usage).totalTokens;
 
     this.history.push({ role: "assistant", content: fullResponse });
-
+    const call = await prisma.call.findUnique({
+      where: { id: this.id },
+    });
     await prisma.call.update({
       where: { id: this.id },
       data: {
         transcript_without_tools: JSON.stringify(this.history),
-        tokensUsed,
+        tokensUsed: tokensUsed + (call?.tokensUsed || 0),
       },
     });
 

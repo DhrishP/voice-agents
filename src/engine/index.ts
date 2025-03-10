@@ -216,6 +216,8 @@ eventBus.on("call.ended", async (event) => {
   const { ctx, data } = event;
   const engine = new PhoneCall(ctx.callId, {} as VoiceCallJobData);
 
+  //use data for summary later
+
   try {
     await prisma.call.update({
       where: { id: ctx.callId },
