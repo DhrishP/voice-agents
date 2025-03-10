@@ -3,6 +3,7 @@ import fs from "fs";
 import { TelephonyProvider } from "../../../types/providers/telephony";
 import { mulaw } from "alawmulaw";
 import eventBus from "../../../engine";
+import twilio from "twilio";
 
 export class TwilioProvider implements TelephonyProvider {
   private ws: WebSocket | null = null;
@@ -10,9 +11,46 @@ export class TwilioProvider implements TelephonyProvider {
   private isStarted: boolean = false;
   private sid: string | null = null;
   private id: string;
+  private static twilioClient: twilio.Twilio;
 
   constructor(id: string) {
     this.id = id;
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+
+    if (!accountSid || !authToken) {
+      throw new Error(
+        "TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN environment variables are required"
+      );
+    }
+
+    if (!TwilioProvider.twilioClient) {
+      TwilioProvider.twilioClient = twilio(accountSid, authToken);
+    }
+  }
+
+  async validateInput(payload: {
+    fromNumber: string;
+    toNumber: string;
+  }): Promise<boolean> {
+    try {
+      const incomingPhoneNumbers =
+        await TwilioProvider.twilioClient.incomingPhoneNumbers.list();
+
+      const hasNumber = incomingPhoneNumbers.some(
+        (number) => number.phoneNumber === payload.fromNumber
+      );
+      if (!hasNumber) {
+        throw new Error(
+          `Phone number ${payload.fromNumber} is not available in your Twilio account`
+        );
+      }
+
+      return true;
+    } catch (error) {
+      console.error("Failed to validate Twilio phone number:", error);
+      throw error;
+    }
   }
 
   setWsObject(ws: WebSocket) {
