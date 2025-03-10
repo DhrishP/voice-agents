@@ -5,6 +5,7 @@ import express from "express";
 import { createQueueDashExpressMiddleware } from "@queuedash/api";
 import { VoiceCallJobData, VoiceCallJobResult } from "../../types/voice-call";
 import eventBus from "../../engine";
+import { TwilioProvider } from "../../services/telephony/twillio/provider";
 
 // Initialize queue
 const queue = new Queue(QUEUE_NAMES.VOICE_CALL, {
@@ -16,12 +17,18 @@ const queueEvents = new QueueEvents(QUEUE_NAMES.VOICE_CALL, {
   connection,
 });
 
-async function processJob(
-  job: Job<VoiceCallJobData>
-  // ): Promise<VoiceCallJobResult> {
-): Promise<void> {
+async function processJob(job: Job<VoiceCallJobData>): Promise<void> {
   try {
     console.log(`Processing job ${job.id} with data:`, job.data);
+
+    if (job.data.telephonyProvider === "twilio") {
+      const provider = new TwilioProvider(job.data.callId || "");
+      await provider.validateInput({
+        fromNumber: job.data.fromNumber,
+        toNumber: job.data.toNumber,
+      });
+    }
+
     eventBus.emit("call.initiated", {
       ctx: {
         callId: job.data.callId || "",
@@ -30,10 +37,9 @@ async function processJob(
       },
       payload: job.data,
     });
-
-    
   } catch (error) {
     console.error(`Error processing job ${job.id}:`, error);
+    throw error; // This will mark the job as failed
   }
 }
 
