@@ -63,7 +63,6 @@ export class RecordingService {
         return;
       }
 
-      console.log(`Adding ${source} audio chunk: ${buffer.length} bytes`);
 
       recording.audioChunks.push({
         chunk: buffer,

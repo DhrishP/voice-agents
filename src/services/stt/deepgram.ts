@@ -59,7 +59,6 @@ export class DeepgramSTTService implements STTService {
       });
 
       this.connection.on(LiveTranscriptionEvents.Open, () => {
-        console.log("🎙️ Deepgram STT: Connected");
         this.isInitialized = true;
       });
 

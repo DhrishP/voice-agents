@@ -55,9 +55,9 @@ export class ElevenLabsTTSService implements TTSService {
           if (message.audio) {
             const audioBuffer = Buffer.from(message.audio, "base64");
 
-            console.log(
-              `ElevenLabs audio chunk received: ${audioBuffer.length} bytes`
-            );
+            // console.log(
+            //   `ElevenLabs audio chunk received: ${audioBuffer.length} bytes`
+            // );
 
             if (this.listenerCallback) {
               this.listenerCallback(audioBuffer);
