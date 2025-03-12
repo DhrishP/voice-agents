@@ -15,6 +15,7 @@ import { SarvamTTSService } from "../services/tts/sarvam";
 import { CoreMessage } from "ai";
 import prisma from "../db/client";
 import recordingService from "../services/recording";
+import usageTrackingService from "../services/usage";
 
 const sttEngines: Record<string, STTService> = {};
 const ttsEngines: Record<string, TTSService> = {};
@@ -164,6 +165,7 @@ eventBus.on("call.initiated", async (event) => {
   await engine.initialize();
 
   recordingService.startRecording(ctx.callId);
+  usageTrackingService.initializeTracking(ctx.callId);
 
   try {
     await prisma.call.update({
@@ -180,6 +182,19 @@ eventBus.on("call.audio.chunk.received", async (event) => {
   const engine = sttEngines[ctx.callId];
 
   recordingService.addAudioChunk(ctx.callId, data.chunk, "user");
+  usageTrackingService.updateActivity(ctx.callId);
+  usageTrackingService.trackAudioActivity(ctx.callId);
+
+  // Track STT usage - estimate audio duration from chunk size
+  let chunkSize = 0;
+  if (typeof data.chunk === "string") {
+    // If it's a base64 string, get approximate decoded size
+    chunkSize = Math.floor((data.chunk.length * 3) / 4);
+  }
+
+  if (chunkSize > 0) {
+    usageTrackingService.trackSTTUsage(ctx.callId, chunkSize);
+  }
 
   if (engine) {
     await engine.pipe(data.chunk);
@@ -192,6 +207,8 @@ eventBus.on("call.transcription.chunk.created", async (event) => {
   const { ctx, data } = event;
   const engine = llmEngines[ctx.callId];
   const telephonyEngine = telephonyEngines[ctx.callId];
+
+  usageTrackingService.updateActivity(ctx.callId);
 
   if (engine) {
     await engine.pipe(data.transcription);
@@ -208,6 +225,13 @@ eventBus.on("call.response.chunk.generated", async (event) => {
   const { ctx, data } = event;
   const engine = ttsEngines[ctx.callId];
 
+  usageTrackingService.updateActivity(ctx.callId);
+
+  // Track TTS usage based on text length
+  if (data.text) {
+    usageTrackingService.trackTTSUsage(ctx.callId, data.text);
+  }
+
   if (engine) {
     await engine.pipe(data.text);
   } else {
@@ -218,6 +242,9 @@ eventBus.on("call.response.chunk.generated", async (event) => {
 eventBus.on("call.audio.chunk.synthesized", async (event) => {
   const { ctx, data } = event;
   const engine = telephonyEngines[ctx.callId];
+
+  usageTrackingService.updateActivity(ctx.callId);
+  usageTrackingService.trackAudioActivity(ctx.callId);
 
   if (data.chunk) {
     recordingService.addAudioChunk(ctx.callId, data.chunk, "assistant");
@@ -236,6 +263,9 @@ eventBus.on("call.ended", async (event) => {
   const engine = new PhoneCall(ctx.callId, {} as VoiceCallJobData);
 
   await recordingService.finishRecording(ctx.callId);
+
+  // Save all usage metrics when call ends
+  await usageTrackingService.saveUsageMetrics(ctx.callId);
 
   try {
     await prisma.call.update({

@@ -42,6 +42,9 @@ model Call {
   recordingFormat          String?
   errorReason              String?
   language                 String     @default("en-US")
+  sttUsage                 Int?
+  ttsUsage                 Int?
+  telephonyDuration        Int?
 
   @@map("calls")
 }
