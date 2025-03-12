@@ -14,6 +14,7 @@ import { ElevenLabsTTSService } from "../services/tts/elevenlabs";
 import { SarvamTTSService } from "../services/tts/sarvam";
 import { CoreMessage } from "ai";
 import prisma from "../db/client";
+import recordingService from "../services/recording";
 
 const sttEngines: Record<string, STTService> = {};
 const ttsEngines: Record<string, TTSService> = {};
@@ -160,8 +161,9 @@ eventBus.on("call.initiated", async (event) => {
   const engine = new PhoneCall(ctx.callId, payload);
 
   await engine.initializeCallRecord();
-
   await engine.initialize();
+
+  recordingService.startRecording(ctx.callId);
 
   try {
     await prisma.call.update({
@@ -176,6 +178,9 @@ eventBus.on("call.initiated", async (event) => {
 eventBus.on("call.audio.chunk.received", async (event) => {
   const { ctx, data } = event;
   const engine = sttEngines[ctx.callId];
+
+  recordingService.addAudioChunk(ctx.callId, data.chunk, "user");
+
   if (engine) {
     await engine.pipe(data.chunk);
   } else {
@@ -213,9 +218,13 @@ eventBus.on("call.response.chunk.generated", async (event) => {
 eventBus.on("call.audio.chunk.synthesized", async (event) => {
   const { ctx, data } = event;
   const engine = telephonyEngines[ctx.callId];
+
+  if (data.chunk) {
+    recordingService.addAudioChunk(ctx.callId, data.chunk, "assistant");
+  }
+
   if (engine) {
     const audioChunk = data.chunk;
-
     await engine.send(audioChunk);
   } else {
     console.log("⚠️ No telephony engine found for call", ctx.callId);
@@ -226,7 +235,7 @@ eventBus.on("call.ended", async (event) => {
   const { ctx, data } = event;
   const engine = new PhoneCall(ctx.callId, {} as VoiceCallJobData);
 
-  //use data for summary later
+  await recordingService.finishRecording(ctx.callId);
 
   try {
     await prisma.call.update({

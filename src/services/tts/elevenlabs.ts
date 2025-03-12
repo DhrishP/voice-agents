@@ -53,16 +53,25 @@ export class ElevenLabsTTSService implements TTSService {
         try {
           const message = JSON.parse(data.toString());
           if (message.audio) {
+            const audioBuffer = Buffer.from(message.audio, "base64");
+
+            console.log(
+              `ElevenLabs audio chunk received: ${audioBuffer.length} bytes`
+            );
+
             if (this.listenerCallback) {
-              this.onChunk(message.audio);
+              this.listenerCallback(audioBuffer);
             }
+
             eventBus.emit("call.audio.chunk.synthesized", {
               ctx: {
                 callId: this.id,
                 provider: "elevenlabs",
                 timestamp: Date.now(),
               },
-              data: { chunk: message.audio.toString("base64") },
+              data: {
+                chunk: message.audio, 
+              },
             });
           }
         } catch (error) {

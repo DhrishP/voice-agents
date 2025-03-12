@@ -5,3 +5,5 @@ export * from "./queue";
 export * from "./tts/elevenlabs";
 export * from "./tts/deepgram";
 export * from "./ai/openai";
+export * from "./storage/s3";
+export * from "./recording";

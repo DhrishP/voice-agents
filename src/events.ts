@@ -45,6 +45,15 @@ interface AppEvents extends EventMap {
     ctx: { callId: string };
     error: Error;
   };
+
+  "call.recording.saved": {
+    ctx: { callId: string };
+    data: {
+      url: string;
+      durationSec: number;
+      localFilePath: string;
+    };
+  };
 }
 
 const eventBus = EventBus.getInstance<AppEvents>();
