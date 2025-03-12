@@ -1,4 +1,5 @@
 import s3Service from "../storage/s3";
+import { s3Config } from "../../config/s3";
 import { Buffer } from "buffer";
 import eventBus from "../../events";
 import prisma from "../../db/client";
@@ -98,7 +99,6 @@ export class RecordingService {
         );
       });
 
-      
       let lastMeaningfulChunkIndex = sortedChunks.length - 1;
       const MIN_MEANINGFUL_CHUNK_SIZE = 50;
 
@@ -144,26 +144,29 @@ export class RecordingService {
       await writeFileAsync(localFilePath, combinedChunks);
       console.log(`✅ Local recording saved to: ${localFilePath}`);
 
+      // Try to upload to S3 if credentials are available
       let url = null;
       try {
-        url = await s3Service.uploadFile(
-          key,
-          combinedChunks,
-          "audio/basic" 
-        );
+        url = await s3Service.uploadFile(key, combinedChunks, "audio/basic");
         console.log(`✅ S3 URL: ${url}`);
 
+        // Update call record in database with S3 details
         await prisma.call.update({
           where: { id: callId },
           data: {
             recordingUrl: url,
             recordingDuration: durationSec,
+            recordingS3Key: key,
+            recordingS3Bucket: s3Config.bucket,
+            recordingS3Region: s3Config.region,
+            recordingFormat: "ulaw",
           },
         });
       } catch (s3Error: any) {
         console.warn(
           `⚠️ S3 upload failed, recording saved locally only: ${s3Error.message}`
         );
+        // Still update duration in database
         await prisma.call.update({
           where: { id: callId },
           data: {
@@ -178,7 +181,8 @@ export class RecordingService {
         `✅ Recording saved for call ${callId}, duration: ${durationSec}s`
       );
 
-      eventBus.emit("call.recording.saved", { // !for future usecase
+      eventBus.emit("call.recording.saved", {
+        // !for future usecase
         ctx: { callId },
         data: {
           url: url || localFilePath,

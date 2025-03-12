@@ -9,35 +9,39 @@ datasource db {
 
 enum CallStatus {
   INITIATED
-  IN_PROGRESS 
+  IN_PROGRESS
   COMPLETED
   FAILED
   CANCELLED
 }
 
 model Call {
-  id                      String      @id @default(uuid())
-  createdAt              DateTime    @default(now())
-  updatedAt              DateTime    @updatedAt
-  status                 CallStatus
-  prompt                 String     
-  telephonyProvider      String
-  llmProvider            String @default("openai")
-  llmModel              String @default("gpt-4o")
-  sttProvider           String @default("deepgram")
-  sttModel              String @default("nova-2")
-  ttsProvider           String @default("elevenlabs")
-  ttsModel              String @default("eleven_multilingual_v2")
-  outputSchema          Json?     
-  output                Json?       
-  transcript_without_tools String    
-  transcript_with_tools    String    
-  summary                 String   
-  tokensUsed                 Int?
-  recordingUrl           String?
-  recordingDuration      Int?
-  errorReason            String?
-  language               String @default("en-US")
+  id                       String     @id @default(uuid())
+  createdAt                DateTime   @default(now())
+  updatedAt                DateTime   @updatedAt
+  status                   CallStatus
+  prompt                   String
+  telephonyProvider        String
+  llmProvider              String     @default("openai")
+  llmModel                 String     @default("gpt-4o")
+  sttProvider              String     @default("deepgram")
+  sttModel                 String     @default("nova-2")
+  ttsProvider              String     @default("elevenlabs")
+  ttsModel                 String     @default("eleven_multilingual_v2")
+  outputSchema             Json?
+  output                   Json?
+  transcript_without_tools String
+  transcript_with_tools    String
+  summary                  String
+  tokensUsed               Int?
+  recordingUrl             String?
+  recordingDuration        Int?
+  recordingS3Key           String?
+  recordingS3Bucket        String?
+  recordingS3Region        String?
+  recordingFormat          String?
+  errorReason              String?
+  language                 String     @default("en-US")
 
-  @@map("calls")         
+  @@map("calls")
 }
