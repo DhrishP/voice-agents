@@ -59,13 +59,18 @@ class PhoneCall {
           status: "INITIATED",
           prompt: this.payload.prompt,
           telephonyProvider: this.payload.telephonyProvider,
-          llmProvider: this.payload.llmProvider,
-          sttProvider: this.payload.sttProvider,
-          ttsProvider: this.payload.ttsProvider,
-          transcript_without_tools: "",
-          transcript_with_tools: "",
           summary: "",
           language: this.payload.language || "en-US",
+          provider: {
+            create: {
+              llmProvider: this.payload.llmProvider,
+              llmModel: this.payload.llmModel,
+              sttProvider: this.payload.sttProvider,
+              sttModel: this.payload.sttModel,
+              ttsProvider: this.payload.ttsProvider,
+              ttsModel: this.payload.ttsModel,
+            },
+          },
         },
       });
     } catch (error) {
@@ -92,7 +97,8 @@ class PhoneCall {
     if (this.payload.sttProvider === "deepgram") {
       const sttEngine = new DeepgramSTTService(
         this.id,
-        this.payload.language || "en-US"
+        this.payload.language || "en-US",
+        this.payload.sttModel
       );
       await sttEngine.initialize();
       this.sttEngine = sttEngine;
@@ -102,7 +108,11 @@ class PhoneCall {
     }
 
     if (this.payload.llmProvider === "openai") {
-      const llmEngine = new OpenAIService(this.id, this.history);
+      const llmEngine = new OpenAIService(
+        this.id,
+        this.history,
+        this.payload.llmModel
+      );
       await llmEngine.initialize();
 
       this.llmEngine = llmEngine;
@@ -122,7 +132,8 @@ class PhoneCall {
     } else if (this.payload.ttsProvider === "elevenlabs") {
       const ttsEngine = new ElevenLabsTTSService(
         this.id,
-        this.payload.language || "en-US"
+        this.payload.language || "en-US",
+        this.payload.ttsModel
       );
       await ttsEngine.initialize();
 

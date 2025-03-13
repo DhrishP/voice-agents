@@ -63,7 +63,6 @@ export class RecordingService {
         return;
       }
 
-
       recording.audioChunks.push({
         chunk: buffer,
         timestamp: Date.now(),
@@ -149,10 +148,9 @@ export class RecordingService {
         url = await s3Service.uploadFile(key, combinedChunks, "audio/basic");
         console.log(`✅ S3 URL: ${url}`);
 
-        // Update call record in database with S3 details
-        await prisma.call.update({
-          where: { id: callId },
+        await prisma.recording.create({
           data: {
+            callId,
             recordingUrl: url,
             recordingDuration: durationSec,
             recordingS3Key: key,
@@ -165,10 +163,10 @@ export class RecordingService {
         console.warn(
           `⚠️ S3 upload failed, recording saved locally only: ${s3Error.message}`
         );
-        // Still update duration in database
-        await prisma.call.update({
-          where: { id: callId },
+        
+        await prisma.recording.create({
           data: {
+            callId,
             recordingDuration: durationSec,
           },
         });
@@ -181,7 +179,6 @@ export class RecordingService {
       );
 
       eventBus.emit("call.recording.saved", {
-        // !for future usecase
         ctx: { callId },
         data: {
           url: url || localFilePath,

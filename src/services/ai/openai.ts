@@ -3,15 +3,18 @@ import { openai } from "@ai-sdk/openai";
 import { CoreMessage, generateText, streamText } from "ai";
 import eventBus from "../../engine";
 import prisma from "../../db/client";
+import { TranscriptType } from "@prisma/client";
 export class OpenAIService implements AIService {
   private isInitialized = false;
   private currentResponse: string = "";
   private listenerCallback: ((chunk: string) => void) | null = null;
   private id: string;
   private history: CoreMessage[];
-  constructor(id: string, history: CoreMessage[]) {
+  private model: string;
+  constructor(id: string, history: CoreMessage[], model: string) {
     this.id = id;
     this.history = history;
+    this.model = model;
   }
 
   onChunk(listenerCallback: (chunk: string) => void): void {
@@ -31,7 +34,7 @@ export class OpenAIService implements AIService {
     }
 
     const { text } = await generateText({
-      model: openai("gpt-4o-mini"),
+      model: openai(this.model),
       prompt: prompt,
     });
 
@@ -48,10 +51,11 @@ export class OpenAIService implements AIService {
 
     this.history.push({ role: "user", content: text });
 
-    await prisma.call.update({
-      where: { id: this.id },
+    await prisma.transcript.create({
       data: {
-        transcript_without_tools: JSON.stringify(this.history),
+        callId: this.id,
+        type: TranscriptType.USER,
+        transcript: text,
       },
     });
 
@@ -84,11 +88,12 @@ export class OpenAIService implements AIService {
     const call = await prisma.call.findUnique({
       where: { id: this.id },
     });
-    await prisma.call.update({
-      where: { id: this.id },
+
+    await prisma.transcript.create({
       data: {
-        transcript_without_tools: JSON.stringify(this.history),
-        tokensUsed: tokensUsed + (call?.tokensUsed || 0),
+        callId: this.id,
+        type: TranscriptType.ASSISTANT,
+        transcript: fullResponse,
       },
     });
 

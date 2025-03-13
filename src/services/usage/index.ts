@@ -1,3 +1,4 @@
+import { UsageType } from "@prisma/client";
 import prisma from "../../db/client";
 
 class UsageTrackingService {
@@ -96,12 +97,27 @@ class UsageTrackingService {
       console.log(`  - STT Usage: ${Math.round(metrics.sttDuration)} seconds`);
       console.log(`  - TTS Usage: ${metrics.ttsCharCount} characters`);
 
-      await prisma.call.update({
-        where: { id: callId },
+      await prisma.usage.create({
         data: {
-          telephonyDuration: callDurationSeconds,
-          sttUsage: Math.round(metrics.sttDuration),
-          ttsUsage: metrics.ttsCharCount,
+          callId,
+          type: UsageType.TELEPHONY,
+          usage: callDurationSeconds,
+        },
+      });
+
+      await prisma.usage.create({
+        data: {
+          callId,
+          type: UsageType.STT,
+          usage: Math.round(metrics.sttDuration),
+        },
+      });
+
+      await prisma.usage.create({
+        data: {
+          callId,
+          type: UsageType.TTS,
+          usage: metrics.ttsCharCount,
         },
       });
 
