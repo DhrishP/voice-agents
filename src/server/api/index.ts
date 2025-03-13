@@ -42,6 +42,7 @@ app.get("/test", (req, res) => {
     prompt:
       "You are a voice agent. You will talk to the user and help them with their question in the language of the user.",
     telephonyProvider: "twilio",
+    // telephonyProvider: "plivo",
     sttProvider: "deepgram",
     sttModel: "nova-2",
     ttsProvider: "elevenlabs",
@@ -249,7 +250,22 @@ class Api extends Server {
   }
 
   public async stop(): Promise<void> {
-    this.instance.close();
+    if (this.instance) {
+      try {
+        if (this.instance.close && typeof this.instance.close === "function") {
+          this.instance.close();
+        }
+        else if (
+          this.instance.listen &&
+          typeof this.instance.listen === "function"
+        ) {
+          console.log("Closing API Express app");
+          
+        }
+      } catch (error) {
+        console.error("Error stopping API server:", error);
+      }
+    }
   }
 }
 

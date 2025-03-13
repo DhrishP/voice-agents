@@ -16,7 +16,7 @@ import { CoreMessage } from "ai";
 import prisma from "../db/client";
 import recordingService from "../services/recording";
 import usageTrackingService from "../services/usage";
-
+import plivoOperator from "../services/telephony/plivo/operator";
 const sttEngines: Record<string, STTService> = {};
 const ttsEngines: Record<string, TTSService> = {};
 const telephonyEngines: Record<string, TelephonyProvider> = {};
@@ -87,6 +87,15 @@ class PhoneCall {
         this.payload.toNumber
       );
       const phoneCall = await twilioOperator.getPhoneCall(callId);
+      this.telephonyEngine = phoneCall;
+      telephonyEngines[this.id] = phoneCall;
+    } else if (this.payload.telephonyProvider === "plivo") {
+      const callId = await plivoOperator.call(
+        this.id,
+        this.payload.fromNumber,
+        this.payload.toNumber
+      );
+      const phoneCall = await plivoOperator.getPhoneCall(callId);
       this.telephonyEngine = phoneCall;
       telephonyEngines[this.id] = phoneCall;
     } else {
@@ -196,10 +205,8 @@ eventBus.on("call.audio.chunk.received", async (event) => {
   usageTrackingService.updateActivity(ctx.callId);
   usageTrackingService.trackAudioActivity(ctx.callId);
 
-  // Track STT usage - estimate audio duration from chunk size
   let chunkSize = 0;
   if (typeof data.chunk === "string") {
-    // If it's a base64 string, get approximate decoded size
     chunkSize = Math.floor((data.chunk.length * 3) / 4);
   }
 
@@ -275,7 +282,6 @@ eventBus.on("call.ended", async (event) => {
 
   await recordingService.finishRecording(ctx.callId);
 
-  // Save all usage metrics when call ends
   await usageTrackingService.saveUsageMetrics(ctx.callId);
 
   try {

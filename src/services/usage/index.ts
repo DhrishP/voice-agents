@@ -108,6 +108,13 @@ class UsageTrackingService {
       await prisma.usage.create({
         data: {
           callId,
+          type: UsageType.TELEPHONY,
+        },
+      });
+
+      await prisma.usage.create({
+        data: {
+          callId,
           type: UsageType.STT,
           usage: Math.round(metrics.sttDuration),
         },
