@@ -43,8 +43,11 @@ app.get("/test", (req, res) => {
       "You are a voice agent. You will talk to the user and help them with their question in the language of the user.",
     telephonyProvider: "twilio",
     sttProvider: "deepgram",
+    sttModel: "nova-2",
     ttsProvider: "elevenlabs",
+    ttsModel: "eleven_multilingual_v2",
     llmProvider: "openai",
+    llmModel: "gpt-4o-mini",
     language: "hi",
   });
   res.send("Call initiated");

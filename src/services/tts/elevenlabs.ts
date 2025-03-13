@@ -1,6 +1,7 @@
 import { TTSService } from "../../types/providers/tts";
 import WebSocket from "ws";
 import eventBus from "../../engine";
+
 export class ElevenLabsTTSService implements TTSService {
   private ws: WebSocket | null = null;
   private isInitialized = false;
@@ -9,10 +10,16 @@ export class ElevenLabsTTSService implements TTSService {
   private listenerCallback: ((data: Buffer) => void) | null = null;
   private id: string;
   private language: string;
+  private model: string;
 
-  constructor(id: string, language: string = "en-US") {
+  constructor(
+    id: string,
+    language: string = "en-US",
+    model: string = "eleven_multilingual_v2"
+  ) {
     this.id = id;
     this.language = language;
+    this.model = model;
     this.voiceId =
       this.language === "hi" ? "Sxk6njaoa7XLsAFT7WcN" : "JBFqnCBsd6RMkjVDRZzb";
     this.apiKey = process.env.ELEVENLABS_API_KEY || "";
@@ -31,7 +38,7 @@ export class ElevenLabsTTSService implements TTSService {
     return new Promise((resolve, reject) => {
       this.ws = new WebSocket(
         `wss://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream-input?` +
-          `output_format=ulaw_8000&model_id=eleven_multilingual_v2&inactivity_timeout=3600`
+          `output_format=ulaw_8000&model_id=${this.model}&inactivity_timeout=3600`
       );
 
       this.ws.on("open", () => {
@@ -70,7 +77,7 @@ export class ElevenLabsTTSService implements TTSService {
                 timestamp: Date.now(),
               },
               data: {
-                chunk: message.audio, 
+                chunk: message.audio,
               },
             });
           }
