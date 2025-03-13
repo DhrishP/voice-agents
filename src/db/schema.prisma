@@ -92,7 +92,7 @@ enum UsageType {
 
 model Usage {
   id     String    @id @default(uuid())
-  callId String    @unique
+  callId String   
   type   UsageType
   usage  Int?
 
