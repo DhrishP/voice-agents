@@ -148,8 +148,17 @@ export class RecordingService {
         url = await s3Service.uploadFile(key, combinedChunks, "audio/basic");
         console.log(`✅ S3 URL: ${url}`);
 
-        await prisma.recording.create({
-          data: {
+        await prisma.recording.upsert({
+          where: { callId },
+          update: {
+            recordingUrl: url,
+            recordingDuration: durationSec,
+            recordingS3Key: key,
+            recordingS3Bucket: s3Config.bucket,
+            recordingS3Region: s3Config.region,
+            recordingFormat: "ulaw",
+          },
+          create: {
             callId,
             recordingUrl: url,
             recordingDuration: durationSec,
@@ -163,9 +172,13 @@ export class RecordingService {
         console.warn(
           `⚠️ S3 upload failed, recording saved locally only: ${s3Error.message}`
         );
-        
-        await prisma.recording.create({
-          data: {
+
+        await prisma.recording.upsert({
+          where: { callId },
+          update: {
+            recordingDuration: durationSec,
+          },
+          create: {
             callId,
             recordingDuration: durationSec,
           },
