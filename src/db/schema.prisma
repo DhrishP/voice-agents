@@ -16,35 +16,86 @@ enum CallStatus {
 }
 
 model Call {
-  id                       String     @id @default(uuid())
-  createdAt                DateTime   @default(now())
-  updatedAt                DateTime   @updatedAt
-  status                   CallStatus
-  prompt                   String
-  telephonyProvider        String
-  llmProvider              String     @default("openai")
-  llmModel                 String     @default("gpt-4o")
-  sttProvider              String     @default("deepgram")
-  sttModel                 String     @default("nova-2")
-  ttsProvider              String     @default("elevenlabs")
-  ttsModel                 String     @default("eleven_multilingual_v2")
-  outputSchema             Json?
-  output                   Json?
-  transcript_without_tools String
-  transcript_with_tools    String
-  summary                  String
-  tokensUsed               Int?
-  recordingUrl             String?
-  recordingDuration        Int?
-  recordingS3Key           String?
-  recordingS3Bucket        String?
-  recordingS3Region        String?
-  recordingFormat          String?
-  errorReason              String?
-  language                 String     @default("en-US")
-  sttUsage                 Int?
-  ttsUsage                 Int?
-  telephonyDuration        Int?
+  id                String     @id @default(uuid())
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  status            CallStatus
+  prompt            String
+  telephonyProvider String
+  outputSchema      Json?
+  output            Json?
+  summary           String
+  errorReason       String?
+  language          String     @default("en-US")
+
+  transcript Transcript?
+  recording  Recording?
+  provider   Provider?
+  usage      Usage?
 
   @@map("calls")
+}
+
+enum TranscriptType {
+  USER
+  ASSISTANT
+  TOOL
+}
+
+model Transcript {
+  id         String         @id @default(uuid())
+  callId     String         @unique
+  type       TranscriptType
+  transcript String
+
+  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@map("transcripts")
+}
+
+model Recording {
+  id                String  @id @default(uuid())
+  callId            String  @unique
+  recordingUrl      String?
+  recordingDuration Int?
+  recordingS3Key    String?
+  recordingS3Bucket String?
+  recordingS3Region String?
+  recordingFormat   String?
+
+  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@map("recordings")
+}
+
+model Provider {
+  id          String @id @default(uuid())
+  call        Call   @relation(fields: [callId], references: [id], onDelete: Cascade)
+  callId      String @unique
+  llmProvider String @default("openai")
+  llmModel    String @default("gpt-4o")
+  sttProvider String @default("deepgram")
+  sttModel    String @default("nova-2")
+  ttsProvider String @default("elevenlabs")
+  ttsModel    String @default("eleven_multilingual_v2")
+
+  @@map("providers")
+}
+
+enum UsageType {
+  LLM
+  STT
+  TTS
+  TELEPHONY
+}
+
+model Usage {
+  id     String    @id @default(uuid())
+  callId String    @unique
+  type   UsageType
+  usage  Int?
+
+  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
+
+  @@map("usages")
 }
