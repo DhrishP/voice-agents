@@ -28,10 +28,10 @@ model Call {
   errorReason       String?
   language          String     @default("en-US")
 
-  transcript Transcript?
-  recording  Recording?
-  provider   Provider?
-  usage      Usage?
+  transcripts Transcript[]
+  recording   Recording?
+  provider    Provider?
+  usage       Usage[]
 
   @@map("calls")
 }
@@ -44,7 +44,7 @@ enum TranscriptType {
 
 model Transcript {
   id         String         @id @default(uuid())
-  callId     String         @unique
+  callId     String
   type       TranscriptType
   transcript String
 
@@ -70,7 +70,6 @@ model Recording {
 
 model Provider {
   id          String @id @default(uuid())
-  call        Call   @relation(fields: [callId], references: [id], onDelete: Cascade)
   callId      String @unique
   llmProvider String @default("openai")
   llmModel    String @default("gpt-4o")
@@ -78,6 +77,8 @@ model Provider {
   sttModel    String @default("nova-2")
   ttsProvider String @default("elevenlabs")
   ttsModel    String @default("eleven_multilingual_v2")
+
+  call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
 
   @@map("providers")
 }
