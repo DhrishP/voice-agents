@@ -1,6 +1,18 @@
 import { z } from "zod";
 import validator from "validator";
 
+export const CallStatusSchema = z.enum([
+  "INITIATED",
+  "IN_PROGRESS",
+  "COMPLETED",
+  "FAILED",
+  "CANCELLED",
+]);
+
+export const TranscriptTypeSchema = z.enum(["USER", "ASSISTANT", "TOOL"]);
+
+export const UsageTypeSchema = z.enum(["LLM", "STT", "TTS", "TELEPHONY"]);
+
 export const VoiceCallRequestSchema = z.object({
   fromNumber: z
     .string()
@@ -14,16 +26,19 @@ export const VoiceCallRequestSchema = z.object({
   outputSchema: z.record(z.string(), z.any()).optional(),
   telephonyProvider: z.string().default("twilio"),
   llmProvider: z.string().default("openai"),
-  llmModel: z.string().default("gpt-4o-mini"),
-  ttsProvider: z.string().default("elevenlabs"),
-  ttsModel: z.string().default("eleven_turbo_v2_5"),
+  llmModel: z.string().default("gpt-4o"),
   sttProvider: z.string().default("deepgram"),
-  sttModel: z.string().default("whisper_1"),
-  language: z.enum(["en", "hi"]).default("en"),
+  sttModel: z.string().default("nova-2"),
+  ttsProvider: z.string().default("elevenlabs"),
+  ttsModel: z.string().default("eleven_multilingual_v2"),
+  language: z.string().default("en-US"),
   callId: z.string().optional(),
 });
 
 export type VoiceCallRequest = z.infer<typeof VoiceCallRequestSchema>;
+export type CallStatus = z.infer<typeof CallStatusSchema>;
+export type TranscriptType = z.infer<typeof TranscriptTypeSchema>;
+export type UsageType = z.infer<typeof UsageTypeSchema>;
 
 export const VoiceCallJobDataSchema = VoiceCallRequestSchema;
 
