@@ -71,6 +71,13 @@ interface AppEvents extends EventMap {
     };
     provider: string;
   };
+
+  "call.speech.detected": {
+    ctx: { callId: string };
+    data: {
+      transcription: string;
+    };
+  };
 }
 
 const eventBus = EventBus.getInstance<AppEvents>();
