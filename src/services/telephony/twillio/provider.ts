@@ -1,7 +1,5 @@
 import WebSocket from "ws";
-import fs from "fs";
 import { TelephonyProvider } from "../../../types/providers/telephony";
-import { mulaw } from "alawmulaw";
 import eventBus from "../../../engine";
 import twilio from "twilio";
 import { VoiceCallJobData } from "../../../types/voice-call";
@@ -12,6 +10,7 @@ export class TwilioProvider implements TelephonyProvider {
   private sid: string | null = null;
   private id: string;
   private static twilioClient: twilio.Twilio;
+  private callSid: string | null = null;
 
   constructor(id: string) {
     this.id = id;
@@ -140,6 +139,19 @@ export class TwilioProvider implements TelephonyProvider {
     }
     this.listenerCallback = null;
     this.isStarted = false;
+  }
+
+  public async transfer(toNumber: string): Promise<void> {
+    const operator = (await import("./operator")).default;
+    await operator.transfer(this.id, toNumber);
+  }
+
+  public setCallSid(callSid: string): void {
+    this.callSid = callSid;
+  }
+
+  public getCallSid(): string | null {
+    return this.callSid;
   }
 }
 

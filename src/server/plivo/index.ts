@@ -8,17 +8,50 @@ import operator from "../../services/telephony/plivo/operator";
 import Server from "../../types/server";
 import ngrok from "ngrok";
 import eventBus from "../../events";
+import prisma from "../../db/client";
+import recordingService from "../../services/recording";
+import { setupDirectTransferEndpoint } from './direct-transfer';
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Add this line near the top of the file after initializing app
+setupDirectTransferEndpoint(app);
 
 app.post("/plivo/answer/:callId", (req, res) => {
   const { callId } = req.params;
 
   try {
-    const xml = operator.generateXml(callId);
-    res.set("Content-Type", "application/xml");
-    res.send(xml);
+    // Check if we have a transfer in progress for this call
+    const phoneCall = operator.getPhoneCall(callId).then(phoneCall => {
+      const transferNumber = phoneCall.getTransferNumber();
+      
+      if (transferNumber) {
+        console.log(`This is a transfer request for call ${callId} to ${transferNumber}`);
+        
+        // Generate transfer XML
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>
+          <Response>
+            <Speak>Transferring your call to a human agent. Please hold.</Speak>
+            <Dial callbackUrl="${req.protocol}://${req.get('host')}/plivo/transfer-status/${callId}"
+                  callbackMethod="POST">${transferNumber}</Dial>
+          </Response>`;
+          
+        console.log(`Generated transfer XML: ${xml}`);
+        res.set("Content-Type", "application/xml");
+        res.send(xml);
+      } else {
+        // Regular call, proceed normally
+        const xml = operator.generateXml(callId);
+        res.set("Content-Type", "application/xml");
+        res.send(xml);
+      }
+    }).catch(error => {
+      console.log("Error getting phone call:", error);
+      const xml = operator.generateXml(callId);
+      res.set("Content-Type", "application/xml");
+      res.send(xml);
+    });
   } catch (error) {
     console.log("Error generating Plivo XML:", error);
     res.status(404).json({ error: "Invalid call ID" });
@@ -53,90 +86,81 @@ app.post("/plivo/stream-callback/:callId", (req, res) => {
   res.send("<Response></Response>");
 });
 
-wss.on("connection", (ws, req) => {
-  const pathParts = req.url?.split("/") || [];
-  const callId = pathParts[pathParts.length - 1];
+app.post("/plivo/transfer/:callId", (req, res) => {
+  const { callId } = req.params;
+  const toNumber = req.query.number || process.env.TRANSFER_PHONE_NUMBER;
 
-  if (!callId) {
-    console.log("No callId provided in WebSocket connection");
-    ws.close();
-    return;
-  }
+  console.log(`Handling transfer for call ${callId} to ${toNumber}`);
 
-  console.log(`New Plivo WebSocket connection for call ${callId}`);
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+    <Response>
+      <Speak>Transferring your call to a human agent. Please hold.</Speak>
+      <Record callbackUrl="${req.protocol}://${req.get(
+    "host"
+  )}/plivo/recording-callback/${callId}" 
+              callbackMethod="POST" />
+      <Dial recordingCallbackUrl="${req.protocol}://${req.get(
+    "host"
+  )}/plivo/recording-callback/${callId}"
+            recordingCallbackMethod="POST">${toNumber}</Dial>
+    </Response>`;
 
-  // Try-catch around the setWsObject call
-  try {
-    operator.setWsObject(callId, ws);
-  } catch (error) {
-    console.error(`Error setting WebSocket for call ${callId}:`, error);
-    // Don't close the connection yet - we'll handle it within the error/close handlers
-  }
-
-  ws.on("error", (error) => {
-    console.error(`Plivo WebSocket error for call ${callId}:`, error);
-    try {
-      eventBus.emit("call.error", {
-        ctx: { callId },
-        error,
-      });
-    } catch (emitError) {
-      console.error(
-        `Error emitting error event for call ${callId}:`,
-        emitError
-      );
-    }
-  });
-
-  ws.on("close", () => {
-    console.log(`Plivo WebSocket closed for call ${callId}`);
-
-    try {
-      operator.hangup(callId).catch((error: any) => {
-        console.error(`Error hanging up Plivo call ${callId}:`, error);
-        
-      });
-    } catch (error) {
-      console.error(`Error in hangup for call ${callId}:`, error);
-    }
-
-    try {
-      eventBus.emit("call.ended", {
-        ctx: { callId },
-        data: {
-          errorReason: "WebSocket connection closed",
-        },
-      });
-    } catch (emitError) {
-      console.error(
-        `Error emitting ended event for call ${callId}:`,
-        emitError
-      );
-    }
-  });
+  res.set("Content-Type", "application/xml");
+  res.send(xml);
 });
 
-class PlivoServer extends Server {
-  public async start(): Promise<void> {
-    server.listen(this.port, () => {
-      console.log(`Plivo server is running on port ${this.port}`);
+app.post("/plivo/recording-callback/:callId", async (req, res) => {
+  const { callId } = req.params;
+  const recordingUrl = req.body.recording_url || req.body.url;
+  const recordingDuration = parseInt(
+    req.body.recording_duration || req.body.duration || "0",
+    10
+  );
+
+  console.log(`Recording complete for call ${callId}: ${recordingUrl}`);
+
+  try {
+    // Save the recording URL to your database
+    await prisma.recording.upsert({
+      where: { callId },
+      update: {
+        recordingUrl,
+        recordingDuration,
+      },
+      create: {
+        callId,
+        recordingUrl,
+        recordingDuration,
+      },
     });
-    this.instance = server;
 
-    // Setup ngrok tunnel for public access
-    await ngrok.authtoken(process.env.NGROK_AUTHTOKEN || "");
-    const ngrokUrl = await ngrok.connect({
-      addr: this.port,
-      region: "us",
-    });
-    this.url = `${ngrokUrl}`;
-    console.log(`Plivo server is running on ${this.url}`);
-    operator.setBaseUrl(this.url);
+    // Start a new recording session that will capture the human conversation
+    recordingService.startRecording(callId);
+
+    res.status(200).send("OK");
+  } catch (error) {
+    console.error(`Error processing recording for call ${callId}:`, error);
+    res.status(500).send("Error processing recording");
   }
+});
 
-  public async stop(): Promise<void> {
-    this.instance.close();
-  }
-}
+app.post("/plivo/direct-transfer/:callId", (req, res) => {
+  const { callId } = req.params;
+  const toNumber = req.query.number || process.env.TRANSFER_PHONE_NUMBER;
 
-export default PlivoServer;
+  console.log(`Processing direct transfer for call ${callId} to ${toNumber}`);
+
+  // Create a simpler XML with proper Plivo structure
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+    <Response>
+      <Speak>Transferring your call to a human agent. Please hold.</Speak>
+      <Dial callbackUrl="${req.protocol}://${req.get(
+    "host"
+  )}/plivo/transfer-status/${callId}"
+            callbackMethod="POST"
+            action="${req.protocol}://${req.get(
+    "host"
+  )}/plivo/transfer-status/${callId}"
+            method="POST"
+            redirect="true">${toNumber}</Dial>
+    </Response>`

@@ -12,6 +12,7 @@ export class PlivoProvider implements TelephonyProvider {
   private id: string;
   private static plivoClient: any;
   private streamId: string | null = null;
+  private transferNumber: string | null = null;
 
   constructor(id: string) {
     this.id = id;
@@ -61,17 +62,14 @@ export class PlivoProvider implements TelephonyProvider {
 
     this.ws.on("message", (data: any) => {
       try {
-        // Must parse as JSON first
         const message = JSON.parse(data.toString());
 
-        // Handle start event and save streamId
         if (message.event === "start") {
           console.log("Stream started with ID:", message.start.streamId);
           this.streamId = message.start.streamId;
           return;
         }
 
-        // Handle media events
         if (message.event === "media") {
           if (this.listenerCallback) {
             this.listenerCallback(message.media.payload);
@@ -103,7 +101,6 @@ export class PlivoProvider implements TelephonyProvider {
       });
     });
 
-    // Mark the connection as started when it's opened
     this.ws.on("open", () => {
       console.log("Plivo WebSocket connection opened");
       this.isStarted = true;
@@ -117,13 +114,12 @@ export class PlivoProvider implements TelephonyProvider {
     }
 
     try {
-      // Must use the proper format that Plivo expects
       const audioMessage = {
         event: "playAudio",
         media: {
           contentType: "audio/x-mulaw",
           sampleRate: 8000,
-          payload: audioData, // Already base64 encoded
+          payload: audioData,
         },
       };
 
@@ -139,7 +135,7 @@ export class PlivoProvider implements TelephonyProvider {
     try {
       const clearAudioMessage = {
         event: "clearAudio",
-        stream_id: this.streamId, // Must use streamId saved from 'start' event
+        stream_id: this.streamId,
       };
 
       this.ws.send(JSON.stringify(clearAudioMessage));
@@ -181,11 +177,29 @@ export class PlivoProvider implements TelephonyProvider {
 
     this.listenerCallback = null;
     this.isStarted = false;
-    this.callUuid = null; 
+    this.callUuid = null;
   }
 
-  setCallUuid(uuid: string): void {
-    this.callUuid = uuid;
+  public setCallUuid(callUuid: string): void {
+    this.callUuid = callUuid;
+  }
+
+  public getCallUuid(): string | null {
+    return this.callUuid;
+  }
+
+  public async transfer(toNumber: string): Promise<void> {
+    // Import the operator here to avoid circular dependencies
+    const operator = (await import("./operator")).default;
+    await operator.transfer(this.id, toNumber);
+  }
+
+  public setTransferNumber(transferNumber: string): void {
+    this.transferNumber = transferNumber;
+  }
+
+  public getTransferNumber(): string | null {
+    return this.transferNumber;
   }
 }
 

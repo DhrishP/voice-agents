@@ -115,6 +115,65 @@ export class PlivoOperator {
   public async setBaseUrl(baseUrl: string): Promise<void> {
     this.baseUrl = baseUrl;
   }
+
+  public async transfer(callId: string, toNumber: string): Promise<void> {
+    try {
+      if (!this.activeCallIds.has(callId)) {
+        throw new Error(`No active call found for ID ${callId}`);
+      }
+
+      const phoneCall = await this.getPhoneCall(callId);
+      const callUuid = phoneCall.getCallUuid();
+
+      if (!callUuid) {
+        throw new Error(`No call UUID found for call ID ${callId}`);
+      }
+
+      phoneCall.setTransferNumber(toNumber);
+
+      console.log(`Initiating transfer for call ${callId} to ${toNumber}`);
+
+      // Simplest possible approach with minimal parameters
+      const authId = process.env.PLIVO_AUTH_ID as string;
+      const authToken = process.env.PLIVO_AUTH_TOKEN as string;
+
+      // Very simple formulation with only the minimum required parameters
+      const url = `https://api.plivo.com/v1/Account/${authId}/Call/${callUuid}/`;
+      const body = JSON.stringify({
+        url: `${
+          this.baseUrl
+        }/plivo/direct-transfer/${callId}?number=${encodeURIComponent(
+          toNumber
+        )}`,
+      });
+
+      console.log(`POST ${url}`);
+      console.log(`Body: ${body}`);
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${Buffer.from(
+            `${authId}:${authToken}`
+          ).toString("base64")}`,
+          "Content-Type": "application/json",
+        },
+        body,
+      });
+
+      const responseText = await response.text();
+      console.log(`Response ${response.status}: ${responseText}`);
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status} - ${responseText}`);
+      }
+
+      console.log(`✅ Call transfer initiated successfully`);
+    } catch (error) {
+      console.error(`❌ Error transferring call ${callId}:`, error);
+      throw error;
+    }
+  }
 }
 
 const operator = new PlivoOperator();

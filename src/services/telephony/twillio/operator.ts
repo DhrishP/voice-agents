@@ -39,12 +39,12 @@ export class Operator {
 
       this.activeCallIds.add(callId);
       const phoneCall = new TwilioProvider(callId);
+
+      phoneCall.setCallSid(call.sid);
+
       this.callIdToPhoneCall.set(callId, phoneCall);
 
-      console.log(
-        `Call initiated with ID: ${callId}`,
-        this.callIdToPhoneCall.get(callId)
-      );
+      console.log(`Call initiated with ID: ${callId}, Twilio SID: ${call.sid}`);
       return callId;
     } catch (error: any) {
       throw new Error(`Failed to initiate Twilio call: ${error.message}`);
@@ -92,6 +92,36 @@ export class Operator {
 
   public async setBaseUrl(baseUrl: string): Promise<void> {
     this.baseUrl = baseUrl;
+  }
+
+  public async transfer(callId: string, toNumber: string): Promise<void> {
+    try {
+      if (!this.activeCallIds.has(callId)) {
+        throw new Error(`No active call found for ID ${callId}`);
+      }
+
+      const phoneCall = await this.getPhoneCall(callId);
+      const callSid = phoneCall.getCallSid();
+
+      if (!callSid) {
+        throw new Error(`No call SID found for ID ${callId}`);
+      }
+
+      // Create TwiML for transfer
+      const twiml = new VoiceResponse();
+      twiml.say("Transferring your call to a human agent. Please hold.");
+      twiml.dial({}, toNumber);
+
+      // Update the call with new TwiML
+      await this.twilioClient.calls(callSid).update({
+        twiml: twiml.toString(),
+      });
+
+      console.log(`✅ Call ${callId} transferred to ${toNumber}`);
+    } catch (error) {
+      console.error(`❌ Error transferring call ${callId}:`, error);
+      throw error;
+    }
   }
 }
 
