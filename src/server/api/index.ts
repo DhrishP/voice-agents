@@ -41,8 +41,8 @@ app.get("/test", (req, res) => {
     toNumber: process.env.TO_NUMBER,
     prompt:
       "You are a voice agent. You will talk to the user and help them with their question in the language of the user.",
-    telephonyProvider: "twilio",
-    // telephonyProvider: "plivo",
+    // telephonyProvider: "twilio",
+    telephonyProvider: "plivo",
     sttProvider: "deepgram",
     sttModel: "nova-2",
     ttsProvider: "elevenlabs",

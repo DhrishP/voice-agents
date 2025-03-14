@@ -153,22 +153,35 @@ export class PlivoProvider implements TelephonyProvider {
 
   public async hangup(): Promise<void> {
     if (this.ws) {
-      console.log("Hanging up Plivo call");
-      this.ws.close();
+      console.log("Closing Plivo WebSocket connection");
+      try {
+        this.ws.close();
+      } catch (error) {
+        console.log("Error closing WebSocket:", error);
+      }
       this.ws = null;
     }
 
-    // If we have the call UUID, we can also end it via the API
     if (this.callUuid) {
       try {
         await PlivoProvider.plivoClient.calls.hangup(this.callUuid);
-      } catch (error) {
-        console.error("Error hanging up Plivo call via API:", error);
+      } catch (error: any) {
+        if (error.status === 404) {
+          console.log(
+            `Plivo call ${this.callUuid} already ended, ignoring 404 error`
+          );
+        } else {
+          console.log(
+            `Non-critical error hanging up Plivo call:`,
+            error.message || error
+          );
+        }
       }
     }
 
     this.listenerCallback = null;
     this.isStarted = false;
+    this.callUuid = null; 
   }
 
   setCallUuid(uuid: string): void {
