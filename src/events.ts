@@ -36,6 +36,14 @@ interface AppEvents extends EventMap {
     };
   };
 
+  "call.hangup.requested": {
+    ctx: { callId: string };
+    data: {
+      reason: string;
+    };
+    provider: string;
+  };
+
   "call.ended": {
     ctx: { callId: string };
     data: any;
@@ -53,6 +61,15 @@ interface AppEvents extends EventMap {
       durationSec: number;
       localFilePath: string;
     };
+  };
+
+  "call.transfer.requested": {
+    ctx: { callId: string };
+    data: {
+      reason: string;
+      transferNumber: string;
+    };
+    provider: string;
   };
 }
 

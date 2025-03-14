@@ -1,7 +1,7 @@
 import eventBus from "../events";
 import { VoiceCallJobData } from "../types";
 import { DeepgramSTTService } from "../services/stt/deepgram";
-import { OpenAIService } from "../services/ai/openai";
+import { LLMService } from "../services/ai/llm";
 import { DeepgramTTSService } from "../services/tts/deepgram";
 import {
   AIService,
@@ -117,10 +117,11 @@ class PhoneCall {
     }
 
     if (this.payload.llmProvider === "openai") {
-      const llmEngine = new OpenAIService(
+      const llmEngine = new LLMService(
         this.id,
         this.history,
-        this.payload.llmModel
+        this.payload.llmModel,
+        this.payload.llmProvider
       );
       await llmEngine.initialize();
 
@@ -298,6 +299,45 @@ eventBus.on("call.ended", async (event) => {
   await engine.cleanup();
 });
 
+eventBus.on("call.hangup.requested", async (event) => {
+  const { ctx, data, provider } = event;
+  console.log(`📞 Hang up requested for call ${ctx.callId}: ${data.reason}`);
+
+  const telephonyEngine = telephonyEngines[ctx.callId];
+
+  if (telephonyEngine) {
+    await telephonyEngine.cancel();
+
+    eventBus.emit("call.response.chunk.generated", {
+      ctx: {
+        callId: ctx.callId,
+        provider: provider,
+        timestamp: Date.now(),
+      },
+      data: {
+        text: `Goodbye.`,
+      },
+    });
+
+    setTimeout(async () => {
+      try {
+        await telephonyEngine.hangup();
+
+        eventBus.emit("call.ended", {
+          ctx: { callId: ctx.callId },
+          data: {
+            errorReason: `Call ended by AI: ${data.reason}`,
+          },
+        });
+      } catch (error) {
+        console.error(`Error hanging up call ${ctx.callId}:`, error);
+      }
+    }, 2500);
+  } else {
+    console.log(`⚠️ No telephony engine found for call ${ctx.callId}`);
+  }
+});
+
 eventBus.on("call.error", async (event) => {
   const { ctx, error } = event;
 
@@ -311,6 +351,54 @@ eventBus.on("call.error", async (event) => {
     });
   } catch (dbError) {
     console.error("Failed to update call error status:", dbError);
+  }
+});
+
+eventBus.on("call.transfer.requested", async (event) => {
+  const { ctx, data, provider } = event;
+  console.log(
+    `📞 Transfer requested for call ${ctx.callId} to : ${data.reason}`
+  );
+
+  const telephonyEngine = telephonyEngines[ctx.callId];
+
+  if (telephonyEngine) {
+    eventBus.emit("call.response.chunk.generated", {
+      ctx: {
+        callId: ctx.callId,
+        provider: provider,
+        timestamp: Date.now(),
+      },
+      data: {
+        text: `I'll transfer you to our human agent now. Please hold while I connect you.`,
+      },
+    });
+
+    setTimeout(async () => {
+      try {
+        await telephonyEngine.transfer(data.transferNumber);
+
+        await prisma.call.update({
+          where: { id: ctx.callId },
+          data: {
+            status: "COMPLETED",
+            summary: `Call transferred to human agent: ${data.reason}`,
+          },
+        });
+
+        // Emit call ended event after transfer is complete
+        eventBus.emit("call.ended", {
+          ctx: { callId: ctx.callId },
+          data: {
+            errorReason: `Call transferred to human: ${data.reason}`,
+          },
+        });
+      } catch (error) {
+        console.error(`Error transferring call ${ctx.callId}:`, error);
+      }
+    }, 5000); // 5 seconds delay to allow for TTS to complete
+  } else {
+    console.log(`⚠️ No telephony engine found for call ${ctx.callId}`);
   }
 });
 
