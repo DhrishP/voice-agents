@@ -1,20 +1,29 @@
-import { AIEvents, AIService } from "../../types/providers/ai";
+import { AIService } from "../../types/providers/ai";
 import { openai } from "@ai-sdk/openai";
-import { CoreMessage, generateText, streamText } from "ai";
+import { CoreMessage, generateText,  } from "ai";
 import eventBus from "../../engine";
 import prisma from "../../db/client";
 import { TranscriptType } from "@prisma/client";
-export class OpenAIService implements AIService {
+import { SDKServices } from "../sdk/ai";
+export class LLMService implements AIService {
   private isInitialized = false;
-  private currentResponse: string = "";
   private listenerCallback: ((chunk: string) => void) | null = null;
   private id: string;
   private history: CoreMessage[];
   private model: string;
-  constructor(id: string, history: CoreMessage[], model: string) {
+  private provider: string;
+  private sdkService: SDKServices;
+  constructor(
+    id: string,
+    history: CoreMessage[],
+    model: string,
+    provider: string
+  ) {
     this.id = id;
     this.history = history;
     this.model = model;
+    this.provider = provider;
+    this.sdkService = new SDKServices();
   }
 
   onChunk(listenerCallback: (chunk: string) => void): void {
@@ -47,8 +56,6 @@ export class OpenAIService implements AIService {
     }
 
     let fullResponse = "";
-    let tokensUsed = 0;
-
     this.history.push({ role: "user", content: text });
 
     await prisma.transcript.create({
@@ -59,51 +66,39 @@ export class OpenAIService implements AIService {
       },
     });
 
-    console.log("History:", this.history);
-
-    const { textStream, usage } = await streamText({
-      model: openai("gpt-4o-mini"),
-      messages: this.history,
+    const { textStream } = await this.sdkService.streamText({
+      model: this.model,
+      provider: this.provider,
+      history: this.history,
+      callId: this.id,
     });
 
-    for await (const chunk of textStream) {
-      if (this.listenerCallback) {
-        this.listenerCallback(chunk);
+    if (textStream) {
+      for await (const chunk of textStream) {
+        if (this.listenerCallback) {
+          this.listenerCallback(chunk);
+        }
+
+        fullResponse += chunk;
+
+        eventBus.emit("call.response.chunk.generated", {
+          ctx: {
+            callId: this.id,
+            provider: "openai",
+            timestamp: Date.now(),
+          },
+          data: { text: chunk },
+        });
       }
-
-      fullResponse += chunk;
-
       eventBus.emit("call.response.chunk.generated", {
         ctx: {
           callId: this.id,
           provider: "openai",
           timestamp: Date.now(),
         },
-        data: { text: chunk },
+        data: { text: "" },
       });
     }
-    tokensUsed = (await usage).totalTokens;
-
-    this.history.push({ role: "assistant", content: fullResponse });
-    const call = await prisma.call.findUnique({
-      where: { id: this.id },
-    });
-
-    await prisma.transcript.create({
-      data: {
-        callId: this.id,
-        type: TranscriptType.ASSISTANT,
-        transcript: fullResponse,
-      },
-    });
-
-    eventBus.emit("call.response.chunk.generated", {
-      ctx: {
-        callId: this.id,
-        provider: "openai",
-        timestamp: Date.now(),
-      },
-      data: { text: "" },
-    });
+    console.log("History:", this.history);
   }
 }
