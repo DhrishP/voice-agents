@@ -35,24 +35,51 @@ app.get("/", (req, res) => {
 });
 
 app.get("/test", (req, res) => {
+  const {
+    prompt,
+    language,
+    telephonyProvider,
+    sttProvider,
+    ttsProvider,
+    llmProvider,
+    llmModel,
+    ttsModel,
+    sttModel,
+    fromNumber,
+    toNumber,
+  } = req.body;
   queue.add(QUEUE_NAMES.VOICE_CALL, {
+    fromNumber,
+    toNumber,
+    prompt,
+    telephonyProvider,
+    sttProvider,
+    sttModel,
+    ttsProvider,
+    ttsModel,
+    llmProvider,
+    llmModel,
+    language,
     callId: v4(),
-    fromNumber: process.env.FROM_NUMBER,
-    toNumber: process.env.TO_NUMBER,
-    prompt:
-      "You are a voice agent. You will talk to the user and help them with their question in the language of the user.",
-    // telephonyProvider: "twilio",
-    telephonyProvider: "plivo",
-    sttProvider: "deepgram",
-    sttModel: "nova-2",
-    ttsProvider: "elevenlabs",
-    ttsModel: "eleven_multilingual_v2",
-    llmProvider: "openai",
-    llmModel: "gpt-4o-mini",
-    language: "hi",
   });
   res.send("Call initiated");
 });
+
+/* dummy json for api testing
+{
+  "fromNumber": "+1234567890",
+  "toNumber": "+1234567890",
+  "prompt": "You are a voice agent. You will talk to the user and help them with their question in the language of the user.",
+  "telephonyProvider": "plivo",
+  "sttProvider": "deepgram",
+  "sttModel": "nova-2",
+  "ttsProvider": "elevenlabs",
+  "ttsModel": "eleven_multilingual_v2",
+  "llmProvider": "openai",
+  "llmModel": "gpt-4o-mini",
+  "language": "hi" //en-US
+}
+  */
 
 app.post("/api/calls", (req, res) => {
   try {
@@ -254,13 +281,11 @@ class Api extends Server {
       try {
         if (this.instance.close && typeof this.instance.close === "function") {
           this.instance.close();
-        }
-        else if (
+        } else if (
           this.instance.listen &&
           typeof this.instance.listen === "function"
         ) {
           console.log("Closing API Express app");
-          
         }
       } catch (error) {
         console.error("Error stopping API server:", error);
