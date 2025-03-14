@@ -3,4 +3,5 @@ export interface TelephonyProvider {
   cancel(): Promise<void>;
   onListen(callback: (text: string) => void): void;
   hangup(): Promise<void>;
+  transfer(number: string): Promise<void>;
 }

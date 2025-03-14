@@ -4,6 +4,6 @@ export * from "./stt/deepgram";
 export * from "./queue";
 export * from "./tts/elevenlabs";
 export * from "./tts/deepgram";
-export * from "./ai/openai";
+export * from "./ai/llm";
 export * from "./storage/s3";
 export * from "./recording";

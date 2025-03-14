@@ -87,16 +87,6 @@ export class RecordingService {
       const sortedChunks = [...recording.audioChunks].sort(
         (a, b) => a.timestamp - b.timestamp
       );
-
-      console.log(`Chronological chunk sequence for call ${callId}:`);
-      sortedChunks.forEach((chunk, index) => {
-        console.log(
-          `  ${index + 1}. ${chunk.source} at ${new Date(
-            chunk.timestamp
-          ).toISOString()} - ${chunk.chunk.length} bytes`
-        );
-      });
-
       let lastMeaningfulChunkIndex = sortedChunks.length - 1;
       const MIN_MEANINGFUL_CHUNK_SIZE = 50;
 
@@ -132,17 +122,14 @@ export class RecordingService {
           : 0;
       const durationSec = Math.ceil(durationMs / 1000);
 
-      // Generate filenames
       const timestamp = Date.now();
       const fileName = `call-${callId}-${timestamp}.ulaw`;
       const key = path.join("recordings", fileName);
 
-      // Save locally - only one combined file
       const localFilePath = path.join(LOCAL_RECORDINGS_DIR, fileName);
       await writeFileAsync(localFilePath, combinedChunks);
       console.log(`✅ Local recording saved to: ${localFilePath}`);
 
-      // Try to upload to S3 if credentials are available
       let url = null;
       try {
         url = await s3Service.uploadFile(key, combinedChunks, "audio/basic");
