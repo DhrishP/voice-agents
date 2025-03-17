@@ -4,5 +4,4 @@ export interface TelephonyProvider {
   onListen(callback: (text: string) => void): void;
   hangup(): Promise<void>;
   transfer(number: string): Promise<void>;
-  isSpeaking?: boolean;
 }

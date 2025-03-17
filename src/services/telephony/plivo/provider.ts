@@ -130,17 +130,22 @@ export class PlivoProvider implements TelephonyProvider {
   }
 
   public async cancel(): Promise<void> {
-    if (!this.ws || !this.streamId) return;
+    if (!this.ws || !this.streamId) {
+      console.log("Cannot cancel: WebSocket or streamId not initialized");
+      return;
+    }
 
     try {
       const clearAudioMessage = {
         event: "clearAudio",
         stream_id: this.streamId,
       };
+    
 
       this.ws.send(JSON.stringify(clearAudioMessage));
+  
     } catch (error) {
-      console.error("Error clearing audio:", error);
+      console.error("Error sending clearAudio event to Plivo:", error);
     }
   }
   public onListen(callback: (chunk: string) => void): void {

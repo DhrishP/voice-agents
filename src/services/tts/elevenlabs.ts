@@ -126,7 +126,7 @@ export class ElevenLabsTTSService implements TTSService {
   async close(): Promise<void> {
     if (this.ws) {
       this.ws.close();
-      this.ws = null;
+      // this.ws = null;
     }
     this.isInitialized = false;
   }

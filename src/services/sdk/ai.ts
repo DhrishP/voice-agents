@@ -77,7 +77,6 @@ export class SDKServices {
           }),
         },
         onFinish: async ({ text, toolResults, usage }) => {
-          console.log("Tool Results:", toolResults.length);
           if (toolResults.length) {
             console.log("hi");
             history.push({

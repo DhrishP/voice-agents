@@ -243,17 +243,12 @@ eventBus.on("call.transcription.chunk.created", async (event) => {
 eventBus.on("call.response.chunk.generated", async (event) => {
   const { ctx, data } = event;
   const engine = ttsEngines[ctx.callId];
-  const phoneCall = telephonyEngines[ctx.callId];
 
   usageTrackingService.updateActivity(ctx.callId);
 
   // Track TTS usage based on text length
   if (data.text) {
     usageTrackingService.trackTTSUsage(ctx.callId, data.text);
-  }
-
-  if (phoneCall && data.text && data.text.trim().length > 0) {
-    phoneCall.isSpeaking = true;
   }
 
   if (engine) {
@@ -266,6 +261,7 @@ eventBus.on("call.response.chunk.generated", async (event) => {
 eventBus.on("call.audio.chunk.synthesized", async (event) => {
   const { ctx, data } = event;
   const engine = telephonyEngines[ctx.callId];
+  const sttEngine = sttEngines[ctx.callId];
 
   usageTrackingService.updateActivity(ctx.callId);
   usageTrackingService.trackAudioActivity(ctx.callId);
@@ -277,13 +273,6 @@ eventBus.on("call.audio.chunk.synthesized", async (event) => {
   if (engine) {
     const audioChunk = data.chunk;
     await engine.send(audioChunk);
-
-   
-     if (!audioChunk || 
-      (Buffer.isBuffer(audioChunk) && audioChunk.length === 0) || 
-      (typeof audioChunk === 'string' && audioChunk.length === 0)) {
-    engine.isSpeaking = false;
-  }
   } else {
     console.log("⚠️ No telephony engine found for call", ctx.callId);
   }
@@ -408,24 +397,28 @@ eventBus.on("call.transfer.requested", async (event) => {
       } catch (error) {
         console.error(`Error transferring call ${ctx.callId}:`, error);
       }
-    }, 5000); // 5 seconds delay to allow for TTS to complete
+    }, 5000);
   } else {
     console.log(`⚠️ No telephony engine found for call ${ctx.callId}`);
   }
 });
 
-eventBus.on("call.transcription.chunk.created", async (event) => {
+eventBus.on("call.speech.detected", async (event) => {
   const { ctx, data } = event;
   const phoneCall = telephonyEngines[ctx.callId];
+  const ttsEngine = ttsEngines[ctx.callId];
+  console.log("call.speech.detected", data.transcription);
 
   if (!phoneCall) return;
+  console.log("here");
   try {
     await phoneCall.cancel();
   } catch (error) {
-    console.error(`Error cancelling audio for call ${ctx.callId}:`, error);
+    console.error(
+      `Error handling speech detection for call ${ctx.callId}:`,
+      error
+    );
   }
-
-  phoneCall.isSpeaking = false;
 });
 
 export default eventBus;

@@ -20,6 +20,7 @@ export class DeepgramSTTService implements STTService {
     this.id = id;
     this.language = language;
     this.model = model;
+
     const apiKey = process.env.DEEPGRAM_API_KEY;
     if (!apiKey) {
       throw new Error("DEEPGRAM_API_KEY is required in environment variables");
@@ -45,10 +46,19 @@ export class DeepgramSTTService implements STTService {
 
       this.connection.on(LiveTranscriptionEvents.Transcript, (data: any) => {
         const transcript = data.channel?.alternatives[0]?.transcript;
+
         if (transcript && transcript.trim()) {
           if (this.listenerCallback) {
             this.listenerCallback(transcript);
           }
+
+          eventBus.emit("call.speech.detected", {
+            ctx: {
+              callId: this.id,
+            },
+            data: { transcription: transcript },
+          });
+
           eventBus.emit("call.transcription.chunk.created", {
             ctx: {
               callId: this.id,
