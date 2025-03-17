@@ -116,7 +116,10 @@ class PhoneCall {
       throw new Error("Invalid STT provider");
     }
 
-    if (this.payload.llmProvider === "openai") {
+    if (
+      this.payload.llmProvider === "openai" ||
+      this.payload.llmProvider === "gemini"
+    ) {
       const llmEngine = new LLMService(
         this.id,
         this.history,
