@@ -1,6 +1,6 @@
 import { AIService } from "../../types/providers/ai";
 import { openai } from "@ai-sdk/openai";
-import { CoreMessage, generateText,  } from "ai";
+import { CoreMessage, generateText } from "ai";
 import eventBus from "../../engine";
 import prisma from "../../db/client";
 import { TranscriptType } from "@prisma/client";
@@ -20,10 +20,24 @@ export class LLMService implements AIService {
     provider: string
   ) {
     this.id = id;
-    this.history = history;
+    this.history = this.normalizeMessageHistory(history);
     this.model = model;
     this.provider = provider;
     this.sdkService = new SDKServices();
+  }
+
+  private normalizeMessageHistory(messages: CoreMessage[]): CoreMessage[] {
+    if (!messages || messages.length <= 1) return messages || [];
+
+    return messages.reduce((result: CoreMessage[], current, index) => {
+      if (index === 0 || current.role !== messages[index - 1].role) {
+        result.push({ ...current });
+      } else {
+        const lastMessage = result[result.length - 1];
+        lastMessage.content = `${lastMessage.content}\n\n${current.content}`;
+      }
+      return result;
+    }, []);
   }
 
   onChunk(listenerCallback: (chunk: string) => void): void {
@@ -34,10 +48,14 @@ export class LLMService implements AIService {
     if (!process.env.OPENAI_API_KEY) {
       throw new Error("OpenAI API key not found");
     }
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error("Gemini API key not found");
+    }
     this.isInitialized = true;
   }
 
   async generate(prompt: string): Promise<string> {
+    console.log("Generating text in generate LLM func");
     if (!this.isInitialized) {
       await this.initialize();
     }
@@ -57,6 +75,7 @@ export class LLMService implements AIService {
 
     let fullResponse = "";
     this.history.push({ role: "user", content: text });
+    this.history = this.normalizeMessageHistory(this.history);
 
     await prisma.transcript.create({
       data: {

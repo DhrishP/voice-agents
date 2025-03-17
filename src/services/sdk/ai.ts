@@ -1,12 +1,25 @@
-import { openai } from "@ai-sdk/openai";
+import { openai, OpenAIProvider, createOpenAI } from "@ai-sdk/openai";
 import { CoreMessage, generateText, streamText, tool } from "ai";
+import {
+  createGoogleGenerativeAI,
+  GoogleGenerativeAIProvider,
+} from "@ai-sdk/google";
 import { z } from "zod";
 import eventBus from "../../events";
 import prisma from "../../db/client";
 import { TranscriptType } from "@prisma/client";
 
 export class SDKServices {
-  constructor() {}
+  private google: GoogleGenerativeAIProvider;
+  private openai: OpenAIProvider;
+  constructor() {
+    this.google = createGoogleGenerativeAI({
+      apiKey: process.env.GEMINI_API_KEY,
+    });
+    this.openai = createOpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
 
   async generateText(transcription: CoreMessage[]) {
     // future use if any
@@ -29,11 +42,16 @@ export class SDKServices {
     callId: string;
   }) {
     try {
-      const providerModel = provider === "openai" ? openai(model) : null;
+      const providerModel =
+        provider === "openai"
+          ? this.openai(model)
+          : provider === "gemini"
+          ? this.google("gemini-2.0-flash-001")
+          : null;
       if (!providerModel) {
         throw new Error(`Provider ${provider} not supported`);
       }
-      const { textStream, usage } = await streamText({
+      const { textStream } = await streamText({
         model: providerModel,
         messages: history,
         tools: {
