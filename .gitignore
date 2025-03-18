@@ -4,3 +4,5 @@ dist/
 
 recordings/
 output.wav
+test-recordings/
+test-audio.wav

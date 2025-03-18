@@ -430,4 +430,31 @@ eventBus.on("call.speech.detected", async (event) => {
   }
 });
 
+eventBus.on("websocket.ready", async (event) => {
+  const { ctx } = event;
+  console.log(`📱 WebSocket connection ready for call ${ctx.callId}`);
+
+  // Check if engines are initialized for this call
+  const sttEngine = sttEngines[ctx.callId];
+  const llmEngine = llmEngines[ctx.callId];
+  const ttsEngine = ttsEngines[ctx.callId];
+  const telephonyEngine = telephonyEngines[ctx.callId];
+
+  console.log(`📊 Engines status for call ${ctx.callId}:`);
+  console.log(
+    `STT Engine: ${sttEngine ? "✅ Initialized" : "❌ Not initialized"}`
+  );
+  console.log(
+    `LLM Engine: ${llmEngine ? "✅ Initialized" : "❌ Not initialized"}`
+  );
+  console.log(
+    `TTS Engine: ${ttsEngine ? "✅ Initialized" : "❌ Not initialized"}`
+  );
+  console.log(
+    `Telephony Engine: ${
+      telephonyEngine ? "✅ Initialized" : "❌ Not initialized"
+    }`
+  );
+});
+
 export default eventBus;
