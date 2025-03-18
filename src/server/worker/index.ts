@@ -6,6 +6,7 @@ import { createQueueDashExpressMiddleware } from "@queuedash/api";
 import { VoiceCallJobData, VoiceCallJobResult } from "../../types/voice-call";
 import eventBus from "../../engine";
 import { TwilioProvider } from "../../services/telephony/twillio/provider";
+import { WebSocketProvider } from "../../services/telephony/websocket/provider";
 
 // Initialize queue
 const queue = new Queue(QUEUE_NAMES.VOICE_CALL, {
@@ -27,6 +28,13 @@ async function processJob(job: Job<VoiceCallJobData>): Promise<void> {
 
       if (!isValid) {
         throw new Error("Invalid phone number");
+      }
+    } else if (job.data.telephonyProvider === "websocket") {
+      const provider = new WebSocketProvider(job.data.callId || "");
+      const isValid = await provider.validateInput(job.data);
+
+      if (!isValid) {
+        throw new Error("Invalid WebSocket input");
       }
     }
 

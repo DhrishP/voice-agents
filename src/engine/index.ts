@@ -17,6 +17,7 @@ import prisma from "../db/client";
 import recordingService from "../services/recording";
 import usageTrackingService from "../services/usage";
 import plivoOperator from "../services/telephony/plivo/operator";
+import websocketOperator from "../services/telephony/websocket/operator";
 const sttEngines: Record<string, STTService> = {};
 const ttsEngines: Record<string, TTSService> = {};
 const telephonyEngines: Record<string, TelephonyProvider> = {};
@@ -98,6 +99,11 @@ class PhoneCall {
       const phoneCall = await plivoOperator.getPhoneCall(callId);
       this.telephonyEngine = phoneCall;
       telephonyEngines[this.id] = phoneCall;
+    } else if (this.payload.telephonyProvider === "websocket") {
+      const callId = await websocketOperator.createSession(this.id);
+      const provider = await websocketOperator.getPhoneCall(callId);
+      this.telephonyEngine = provider;
+      telephonyEngines[this.id] = provider;
     } else {
       throw new Error("Invalid telephony provider");
     }
