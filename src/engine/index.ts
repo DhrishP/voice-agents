@@ -191,7 +191,14 @@ eventBus.on("call.initiated", async (event) => {
   const { ctx, payload } = event;
   const engine = new PhoneCall(ctx.callId, payload);
 
-  await engine.initializeCallRecord();
+  const existingCall = await prisma.call.findUnique({
+    where: { id: ctx.callId },
+  });
+
+  if (!existingCall) {
+    await engine.initializeCallRecord();
+  }
+
   await engine.initialize();
 
   recordingService.startRecording(ctx.callId);

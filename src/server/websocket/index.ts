@@ -10,6 +10,7 @@ import operator from "../../services/telephony/websocket/operator";
 import eventBus from "../../events";
 import { VoiceCallQueue } from "../../services/queue/voice-call-queue";
 import { v4 as uuidv4 } from "uuid";
+import prisma from "../../db/client";
 
 const app = express();
 const server = new HttpServer(app);
@@ -41,6 +42,30 @@ app.post("/session", async (req: Request, res: Response) => {
   try {
     const callId = await operator.createSession("");
 
+    // Create the call record first
+    await prisma.call.create({
+      data: {
+        id: callId,
+        status: "INITIATED",
+        prompt:
+          req.body.prompt ||
+          "You are a helpful assistant. Answer concisely and clearly.",
+        telephonyProvider: "websocket",
+        summary: "",
+        language: req.body.language || "en-US",
+        provider: {
+          create: {
+            llmProvider: req.body.llmProvider || "openai",
+            llmModel: req.body.llmModel || "gpt-4o",
+            sttProvider: req.body.sttProvider || "deepgram",
+            sttModel: req.body.sttModel || "nova-2",
+            ttsProvider: req.body.ttsProvider || "elevenlabs",
+            ttsModel: req.body.ttsModel || "eleven_multilingual_v2",
+          },
+        },
+      },
+    });
+
     // Create a job for this session to initialize the engines
     await voiceCallQueue.addJob({
       callId: callId,
@@ -48,8 +73,8 @@ app.post("/session", async (req: Request, res: Response) => {
         req.body.prompt ||
         "You are a helpful assistant. Answer concisely and clearly.",
       telephonyProvider: "websocket",
-      fromNumber: "+15555555555", // Dummy number for websocket
-      toNumber: "+15555555555", // Dummy number for websocket
+      fromNumber: "+15555555555",
+      toNumber: "+15555555555",
       llmProvider: req.body.llmProvider || "openai",
       llmModel: req.body.llmModel || "gpt-4o",
       sttProvider: req.body.sttProvider || "deepgram",
@@ -59,11 +84,29 @@ app.post("/session", async (req: Request, res: Response) => {
       language: req.body.language || "en-US",
     });
 
+    // Get the base URL from the operator
+    const baseUrl = await operator.getBaseUrl();
+
+    // Construct the WebSocket URL
+    const wsUrl = `${baseUrl}/stream/${callId}`;
+    console.log(`Created session with WebSocket URL: ${wsUrl}`);
+
     res.json({
       callId,
-      wsUrl: `${await operator.getBaseUrl()}/stream/${callId}`,
+      wsUrl,
+      config: {
+        prompt: req.body.prompt,
+        llmProvider: req.body.llmProvider || "openai",
+        llmModel: req.body.llmModel || "gpt-4o",
+        sttProvider: req.body.sttProvider || "deepgram",
+        sttModel: req.body.sttModel || "nova-2",
+        ttsProvider: req.body.ttsProvider || "elevenlabs",
+        ttsModel: req.body.ttsModel || "eleven_multilingual_v2",
+        language: req.body.language || "en-US",
+      },
     });
   } catch (error: any) {
+    console.error("Error creating session:", error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -190,7 +233,7 @@ app.get("/recordings/:callId", (req: Request, res: Response) => {
 });
 
 // WebSocket handling
-wss.on("connection", (ws, req) => {
+wss.on("connection", async (ws, req) => {
   const pathParts = req.url?.split("/") || [];
   const callId = pathParts[pathParts.length - 1];
 
@@ -202,10 +245,74 @@ wss.on("connection", (ws, req) => {
 
   console.log(`New WebSocket connection for session ${callId}`);
 
-  // Set the WebSocket object for this connection
-  operator.setWsObject(callId, ws).catch((error) => {
-    console.error(`Error setting WebSocket for session ${callId}:`, error);
+  try {
+    // Set the WebSocket object for this connection
+    await operator.setWsObject(callId, ws);
+
+    // Wait a short time for engines to initialize
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    // Check if the call exists and is ready
+    const call = await prisma.call.findUnique({
+      where: { id: callId },
+      include: { provider: true },
+    });
+
+    if (!call) {
+      throw new Error("Call not found");
+    }
+
+    // Emit websocket.ready event
+    eventBus.emit("websocket.ready", {
+      ctx: {
+        callId,
+        provider: "websocket",
+        timestamp: Date.now(),
+      },
+    });
+  } catch (error) {
+    console.error(`Error setting up WebSocket for session ${callId}:`, error);
     ws.close();
+    return;
+  }
+
+  ws.on("message", async (message) => {
+    try {
+      const data = JSON.parse(message.toString());
+      console.log(`WebSocket message received for call ${callId}:`, data);
+
+      if (data.event === "call.started") {
+        console.log(`Call.started event received for call ID: ${callId}`);
+        // Initialize the call if not already initialized
+        eventBus.emit("call.initiated", {
+          ctx: {
+            callId,
+            provider: "websocket",
+            timestamp: Date.now(),
+          },
+          payload: {
+            callId,
+            telephonyProvider: "websocket",
+            prompt:
+              "You are a helpful voice assistant. Keep your responses concise and clear. Answer the user's questions helpfully.",
+            fromNumber: "+15555555555",
+            toNumber: "+15555555555",
+            llmProvider: "openai",
+            llmModel: "gpt-4o",
+            sttProvider: "deepgram",
+            sttModel: "nova-2",
+            ttsProvider: "elevenlabs",
+            ttsModel: "eleven_multilingual_v2",
+            language: "en-US",
+          },
+        });
+      }
+    } catch (error) {
+      console.error(
+        `Error processing WebSocket message for call ${callId}:`,
+        error
+      );
+    }
   });
 
   ws.on("error", (error) => {
@@ -238,14 +345,19 @@ class WebSocketServer extends Server {
     });
 
     this.instance = server;
-    this.url = `ws://localhost:${this.port}`;
+
+    // Use the environment variable or default to localhost
+    const host = process.env.HOST || "localhost";
+    this.url = `ws://${host}:${this.port}`;
     console.log(`WebSocket server is running on ${this.url}`);
 
     await operator.setBaseUrl(this.url);
   }
 
   public async stop(): Promise<void> {
-    this.instance.close();
+    if (this.instance) {
+      this.instance.close();
+    }
   }
 }
 
