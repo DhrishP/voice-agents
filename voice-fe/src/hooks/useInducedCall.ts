@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 
 type EventType = "audio.out" | "call.started" | "call.ended";
 
@@ -180,6 +180,9 @@ export function useInducedCall(
     };
   }, []);
 
+  // Memoize the events object to keep its reference stable
+  const events = useMemo(() => ({ on }), [on]);
+
   // Function to hangup the call
   const hangup = useCallback(() => {
     if (
@@ -196,21 +199,77 @@ export function useInducedCall(
   }, [handleCallEnd]);
 
   // Function to send audio data
-  const pipe = useCallback((audioData: string) => {
-    if (
-      webSocketRef.current &&
-      webSocketRef.current.readyState === WebSocket.OPEN
-    ) {
-      webSocketRef.current.send(
-        JSON.stringify({
-          event: "audio",
-          data: audioData,
-        })
-      );
-      return true;
-    }
-    return false;
-  }, []);
+  const pipe = useCallback(
+    (data: string) => {
+      if (
+        webSocketRef.current &&
+        webSocketRef.current.readyState === WebSocket.OPEN
+      ) {
+        try {
+          // Check if data is in JSON format (not needed for audio)
+          if (data.startsWith("{")) {
+            try {
+              const parsedData = JSON.parse(data);
+              if (parsedData.text) {
+                webSocketRef.current.send(
+                  JSON.stringify({
+                    event: "text",
+                    data: parsedData.text,
+                    isFinal: parsedData.isFinal,
+                  })
+                );
+                console.log(`Sent text: "${parsedData.text}"`);
+                return true;
+              }
+            } catch (e) {
+              console.error("Failed to parse JSON data:", e);
+            }
+          }
+
+          // Audio data handling
+          console.log(`Sending audio data of length ${data.length} bytes`);
+
+          // Validate data is not empty
+          if (!data || data.length === 0) {
+            console.warn("Empty audio data received, not sending");
+            return false;
+          }
+
+          // Validate base64 format
+          if (!/^[A-Za-z0-9+/]*={0,2}$/.test(data)) {
+            console.error("Invalid base64 data received, not sending");
+            return false;
+          }
+
+          // Send audio data to the backend for Deepgram processing
+          webSocketRef.current.send(
+            JSON.stringify({
+              event: "audio",
+              data: data,
+              format: "audio/wav", // Specify format for Deepgram
+              sampleRate: 16000, // Add sample rate information
+              channels: 1, // Specify mono audio
+              chunk: true, // Indicate this is a chunk of streaming audio
+              timestamp: Date.now(),
+            })
+          );
+          return true;
+        } catch (error) {
+          console.error("Error sending data:", error);
+          return false;
+        }
+      } else {
+        const state = webSocketRef.current
+          ? ["CONNECTING", "OPEN", "CLOSING", "CLOSED"][
+              webSocketRef.current.readyState
+            ]
+          : "NOT_INITIALIZED";
+        console.warn(`WebSocket not ready. Current state: ${state}`);
+        return false;
+      }
+    },
+    [webSocketRef]
+  );
 
   return {
     callActive,
@@ -218,7 +277,7 @@ export function useInducedCall(
     transcript,
     hangup,
     pipe,
-    events: { on },
+    events,
   };
 }
 

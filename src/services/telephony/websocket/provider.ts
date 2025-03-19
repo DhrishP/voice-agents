@@ -79,13 +79,19 @@ export class WebSocketProvider implements TelephonyProvider {
       try {
         const message = JSON.parse(data.toString());
         console.log(
-          `WebSocket message received for call ${this.id}, event: ${message.event}`
+          `WebSocket message received for call ${this.id}, event: ${
+            message.event
+          }, data length: ${message.data?.length || 0}`
         );
 
         if (message.event === "audio") {
           console.log(`Received audio data for call ${this.id}, processing...`);
 
           if (!message.data || typeof message.data !== "string") {
+            console.error(
+              `Invalid audio data format for call ${this.id}:`,
+              message.data
+            );
             throw new Error("Invalid audio data format");
           }
 
@@ -95,6 +101,28 @@ export class WebSocketProvider implements TelephonyProvider {
               `Received audio chunk size: ${audioBuffer.length} bytes for call ${this.id}`
             );
 
+            // Validate audio buffer
+            if (audioBuffer.length === 0) {
+              console.warn(`Received empty audio buffer for call ${this.id}`);
+              return;
+            }
+
+            // Check if we have actual audio data
+            const hasAudio = audioBuffer.some((byte) => byte !== 0);
+            if (!hasAudio) {
+              console.warn(`Received silent audio buffer for call ${this.id}`);
+              return;
+            }
+
+            // Store audio format info for debugging
+            const audioFormat = message.format || "audio/wav";
+            const sampleRate = message.sampleRate || 16000;
+            const channels = message.channels || 1;
+
+            console.log(
+              `Audio info for call ${this.id}: format=${audioFormat}, sampleRate=${sampleRate}, channels=${channels}`
+            );
+
             if (this.listenerCallback) {
               console.log(
                 `Forwarding audio chunk to listener for call ${this.id}`
@@ -102,6 +130,10 @@ export class WebSocketProvider implements TelephonyProvider {
               this.listenerCallback(message.data);
             }
 
+            // Emit event with essential audio metadata
+            console.log(
+              `Emitting audio.chunk.received event for call ${this.id}`
+            );
             eventBus.emit("call.audio.chunk.received", {
               ctx: {
                 callId: this.id,
@@ -112,9 +144,14 @@ export class WebSocketProvider implements TelephonyProvider {
                 chunk: message.data,
                 direction: "inbound",
               },
+              // We can't add extra fields due to type constraints,
+              // but we log the information for debugging
             });
 
             if (message.text) {
+              console.log(
+                `Received transcription for call ${this.id}: ${message.text}`
+              );
               eventBus.emit("call.transcription.chunk.created", {
                 ctx: {
                   callId: this.id,
