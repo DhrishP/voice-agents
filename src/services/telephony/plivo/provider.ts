@@ -86,7 +86,6 @@ export class PlivoProvider implements TelephonyProvider {
           });
         }
 
-      
         if (message.event === "dtmf") {
           console.log("Received DTMF event from Plivo:", message);
 
@@ -108,6 +107,15 @@ export class PlivoProvider implements TelephonyProvider {
             );
           }
         }
+
+        // if (message.event === "hangup") {
+        //   eventBus.emit("call.ended", {
+        //     ctx: { callId: this.id },
+        //     data: {
+        //       errorReason: "Plivo call ended",
+        //     },
+        //   });
+        // }
       } catch (error) {
         console.error("Error processing WebSocket message:", error);
       }

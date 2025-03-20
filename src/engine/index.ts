@@ -297,10 +297,24 @@ eventBus.on("call.audio.chunk.synthesized", async (event) => {
 eventBus.on("call.ended", async (event) => {
   const { ctx, data } = event;
   const engine = new PhoneCall(ctx.callId, {} as VoiceCallJobData);
+  const telephonyEngine = telephonyEngines[ctx.callId];
+  const sttEngine = sttEngines[ctx.callId];
+  const ttsEngine = ttsEngines[ctx.callId];
 
   await recordingService.finishRecording(ctx.callId);
 
   await usageTrackingService.saveUsageMetrics(ctx.callId);
+
+  if (telephonyEngine) {
+    await telephonyEngine.hangup();
+  }
+
+  if (sttEngine) {
+    await sttEngine.close();
+  }
+  if (ttsEngine) {
+    await ttsEngine.close();
+  }
 
   try {
     await prisma.call.update({

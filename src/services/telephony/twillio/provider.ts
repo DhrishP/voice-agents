@@ -90,6 +90,15 @@ export class TwilioProvider implements TelephonyProvider {
           const tone = message.dtmf.digit as DTMFTone;
           DTMFService.processDTMFTone(this.id, "twilio", tone);
         }
+
+        // if (message.event === "hangup") {
+        //   eventBus.emit("call.ended", {
+        //     ctx: { callId: this.id },
+        //     data: {
+        //       errorReason: "Twilio call ended",
+        //     },
+        //   });
+        // }
       } catch (error) {
         console.error("Error processing WebSocket message:", error);
       }
