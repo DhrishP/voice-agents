@@ -3,11 +3,12 @@ import { TelephonyProvider } from "../../../types/providers/telephony";
 import eventBus from "../../../engine";
 import { VoiceCallJobData } from "../../../types/voice-call";
 import { Client } from "plivo";
+import DTMFService from "../../dtmf";
+import { DTMFTone } from "../../../types/dtmf";
 
 export class PlivoProvider implements TelephonyProvider {
   private ws: WebSocket | null = null;
   private listenerCallback: ((chunk: string) => void) | null = null;
-  private isStarted: boolean = false;
   private callUuid: string | null = null;
   private id: string;
   private static plivoClient: any;
@@ -84,6 +85,29 @@ export class PlivoProvider implements TelephonyProvider {
             data: { chunk: message.media.payload, direction: "inbound" },
           });
         }
+
+      
+        if (message.event === "dtmf") {
+          console.log("Received DTMF event from Plivo:", message);
+
+          if (message.dtmf && message.dtmf.digit) {
+            // Format from actual logs
+            const tone = message.dtmf.digit as DTMFTone;
+            DTMFService.processDTMFTone(this.id, "plivo", tone);
+          } else if (message.digit) {
+            const tone = message.digit as DTMFTone;
+            DTMFService.processDTMFTone(this.id, "plivo", tone);
+          } else if (message.tone) {
+            // Alternative format if using tone instead of digit (as per docs)
+            const tone = message.tone as DTMFTone;
+            DTMFService.processDTMFTone(this.id, "plivo", tone);
+          } else {
+            console.error(
+              "Received DTMF event but couldn't extract digit or tone:",
+              message
+            );
+          }
+        }
       } catch (error) {
         console.error("Error processing WebSocket message:", error);
       }
@@ -103,7 +127,6 @@ export class PlivoProvider implements TelephonyProvider {
 
     this.ws.on("open", () => {
       console.log("Plivo WebSocket connection opened");
-      this.isStarted = true;
     });
   }
 
@@ -140,10 +163,8 @@ export class PlivoProvider implements TelephonyProvider {
         event: "clearAudio",
         stream_id: this.streamId,
       };
-    
 
       this.ws.send(JSON.stringify(clearAudioMessage));
-  
     } catch (error) {
       console.error("Error sending clearAudio event to Plivo:", error);
     }
@@ -181,7 +202,6 @@ export class PlivoProvider implements TelephonyProvider {
     }
 
     this.listenerCallback = null;
-    this.isStarted = false;
     this.callUuid = null;
   }
 
