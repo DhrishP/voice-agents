@@ -3,6 +3,9 @@ import { TelephonyProvider } from "../../../types/providers/telephony";
 import eventBus from "../../../engine";
 import twilio from "twilio";
 import { VoiceCallJobData } from "../../../types/voice-call";
+import DTMFService from "../../dtmf";
+import { DTMFTone } from "../../../types/dtmf";
+
 export class TwilioProvider implements TelephonyProvider {
   private ws: WebSocket | null = null;
   private listenerCallback: ((chunk: string) => void) | null = null;
@@ -80,6 +83,12 @@ export class TwilioProvider implements TelephonyProvider {
             },
             data: { chunk: message.media.payload, direction: "inbound" },
           });
+        }
+
+        if (message.event === "dtmf") {
+          console.log("Received DTMF event from Twilio:", message.dtmf);
+          const tone = message.dtmf.digit as DTMFTone;
+          DTMFService.processDTMFTone(this.id, "twilio", tone);
         }
       } catch (error) {
         console.error("Error processing WebSocket message:", error);
