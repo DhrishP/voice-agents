@@ -276,45 +276,6 @@ wss.on("connection", async (ws, req) => {
     return;
   }
 
-  ws.on("message", async (message) => {
-    try {
-      const data = JSON.parse(message.toString());
-      console.log(`WebSocket message received for call ${callId}:`, data);
-
-      if (data.event === "call.started") {
-        console.log(`Call.started event received for call ID: ${callId}`);
-        // Initialize the call if not already initialized
-        eventBus.emit("call.initiated", {
-          ctx: {
-            callId,
-            provider: "websocket",
-            timestamp: Date.now(),
-          },
-          payload: {
-            callId,
-            telephonyProvider: "websocket",
-            prompt:
-              "You are a helpful voice assistant. Keep your responses concise and clear. Answer the user's questions helpfully.",
-            fromNumber: "+15555555555",
-            toNumber: "+15555555555",
-            llmProvider: "openai",
-            llmModel: "gpt-4o",
-            sttProvider: "deepgram",
-            sttModel: "nova-2",
-            ttsProvider: "elevenlabs",
-            ttsModel: "eleven_multilingual_v2",
-            language: "en-US",
-          },
-        });
-      }
-    } catch (error) {
-      console.error(
-        `Error processing WebSocket message for call ${callId}:`,
-        error
-      );
-    }
-  });
-
   ws.on("error", (error) => {
     console.error(`WebSocket error for session ${callId}:`, error);
     eventBus.emit("call.error", {

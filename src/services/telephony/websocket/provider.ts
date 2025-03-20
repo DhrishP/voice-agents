@@ -2,13 +2,14 @@ import WebSocket from "ws";
 import { TelephonyProvider } from "../../../types/providers/telephony";
 import eventBus from "../../../engine";
 import { VoiceCallJobData } from "../../../types/voice-call";
+import alawmulaw from "alawmulaw";
 
 export class WebSocketProvider implements TelephonyProvider {
   private ws: WebSocket | null = null;
   private listenerCallback: ((chunk: string) => void) | null = null;
   private isStarted: boolean = false;
   private id: string;
-  private callId: string | null = null;
+  private callUuid: string | null = null;
 
   constructor(id: string) {
     this.id = id;
@@ -96,6 +97,7 @@ export class WebSocketProvider implements TelephonyProvider {
           }
 
           try {
+            // Decode base64 to get the binary audio data
             const audioBuffer = Buffer.from(message.data, "base64");
             console.log(
               `Received audio chunk size: ${audioBuffer.length} bytes for call ${this.id}`
@@ -114,6 +116,44 @@ export class WebSocketProvider implements TelephonyProvider {
               return;
             }
 
+            // Convert audio to A-Law format if needed
+            let processedAudio = message.data;
+            if (
+              message.format === "audio/wav" ||
+              message.format === "audio/pcm"
+            ) {
+              try {
+                console.log(
+                  `Converting ${message.format} to A-Law encoding for call ${this.id}`
+                );
+                processedAudio = this.encodeAudio(audioBuffer);
+                console.log(
+                  `Encoded audio with A-Law, original size: ${audioBuffer.length}`
+                );
+              } catch (encodeError) {
+                console.error(
+                  `Error encoding audio with A-Law: ${encodeError}`
+                );
+                // Continue with original audio data
+                console.log(
+                  `Using original ${message.format} audio data for call ${this.id}`
+                );
+              }
+            } else {
+              console.log(
+                `Using original audio format (${
+                  message.format || "unknown"
+                }) for call ${this.id}`
+              );
+            }
+
+            if (this.listenerCallback) {
+              console.log(
+                `Forwarding audio chunk to listener for call ${this.id}`
+              );
+              this.listenerCallback(processedAudio);
+            }
+
             // Store audio format info for debugging
             const audioFormat = message.format || "audio/wav";
             const sampleRate = message.sampleRate || 16000;
@@ -122,13 +162,6 @@ export class WebSocketProvider implements TelephonyProvider {
             console.log(
               `Audio info for call ${this.id}: format=${audioFormat}, sampleRate=${sampleRate}, channels=${channels}`
             );
-
-            if (this.listenerCallback) {
-              console.log(
-                `Forwarding audio chunk to listener for call ${this.id}`
-              );
-              this.listenerCallback(message.data);
-            }
 
             // Emit event with essential audio metadata
             console.log(
@@ -141,11 +174,9 @@ export class WebSocketProvider implements TelephonyProvider {
                 timestamp: Date.now(),
               },
               data: {
-                chunk: message.data,
+                chunk: processedAudio,
                 direction: "inbound",
               },
-              // We can't add extra fields due to type constraints,
-              // but we log the information for debugging
             });
 
             if (message.text) {
@@ -191,32 +222,30 @@ export class WebSocketProvider implements TelephonyProvider {
               message: "WebSocket connection established and ready for audio",
             })
           );
-        } else if (message.event === "text") {
-          console.log(
-            `Text message received for call ${this.id}: ${message.data}`
-          );
 
-          if (message.data && typeof message.data === "string") {
-            eventBus.emit("call.transcription.chunk.created", {
-              ctx: {
-                callId: this.id,
-                provider: "websocket",
-                timestamp: Date.now(),
-              },
-              data: {
-                transcription: message.data,
-              },
-            });
-
-            eventBus.emit("call.speech.detected", {
-              ctx: {
-                callId: this.id,
-              },
-              data: {
-                transcription: message.data,
-              },
-            });
-          }
+          // Emit call.initiated event similar to Plivo
+          eventBus.emit("call.initiated", {
+            ctx: {
+              callId: this.id,
+              provider: "websocket",
+              timestamp: Date.now(),
+            },
+            payload: {
+              callId: this.id,
+              telephonyProvider: "websocket",
+              prompt:
+                "You are a helpful voice assistant. Keep your responses concise and clear. Answer the user's questions helpfully.",
+              fromNumber: "+15555555555",
+              toNumber: "+15555555555",
+              llmProvider: "openai",
+              llmModel: "gpt-4o",
+              sttProvider: "deepgram",
+              sttModel: "nova-2",
+              ttsProvider: "elevenlabs",
+              ttsModel: "eleven_multilingual_v2",
+              language: "en-US",
+            },
+          });
         }
       } catch (error: any) {
         console.error(
@@ -250,6 +279,42 @@ export class WebSocketProvider implements TelephonyProvider {
         },
       });
     });
+  }
+
+  private encodeAudio(
+    audioBuffer: Buffer,
+    format: "alaw" | "mulaw" = "alaw"
+  ): string {
+    try {
+      // Create Int16Array view of the buffer for encoding
+      const samples = new Int16Array(
+        audioBuffer.buffer,
+        audioBuffer.byteOffset,
+        audioBuffer.byteLength / 2
+      );
+
+      let encodedData;
+
+      // Encode to either A-Law or mu-Law based on the format parameter
+      if (format === "alaw") {
+        encodedData = alawmulaw.alaw.encode(samples);
+        console.log(
+          `Encoded audio with A-Law encoding, original size: ${audioBuffer.length}`
+        );
+      } else {
+        encodedData = alawmulaw.mulaw.encode(samples);
+        console.log(
+          `Encoded audio with mu-Law encoding, original size: ${audioBuffer.length}`
+        );
+      }
+
+      // Convert back to base64 and return
+      return Buffer.from(encodedData).toString("base64");
+    } catch (error) {
+      console.error(`Error encoding to ${format}: ${error}`);
+      // Return original data as fallback
+      return audioBuffer.toString("base64");
+    }
   }
 
   public async send(audioData: string): Promise<void> {
@@ -335,12 +400,12 @@ export class WebSocketProvider implements TelephonyProvider {
     await this.hangup();
   }
 
-  public setCallId(callId: string): void {
-    this.callId = callId;
+  public setCallUuid(callUuid: string): void {
+    this.callUuid = callUuid;
   }
 
-  public getCallId(): string | null {
-    return this.callId;
+  public getCallUuid(): string | null {
+    return this.callUuid;
   }
 }
 export default WebSocketProvider;
