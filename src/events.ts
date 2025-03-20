@@ -1,5 +1,6 @@
 import { EventBus, EventMap } from "./lib/EventBus";
 import { VoiceCallJobData } from "./types";
+import { DTMFTone } from "./types/dtmf";
 
 interface AppEvents extends EventMap {
   "call.initiated": {
@@ -76,6 +77,13 @@ interface AppEvents extends EventMap {
     ctx: { callId: string };
     data: {
       transcription: string;
+    };
+  };
+
+  "call.dtmf.received": {
+    ctx: { provider: string; callId: string; timestamp: number };
+    data: {
+      tone: DTMFTone;
     };
   };
 }
