@@ -3,15 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import useInducedCall from "@/hooks/useInducedCall";
 import React from "react";
-// @ts-ignore
-import { ReactMic } from "react-mic";
-
-interface ReactMicRecording {
-  blob: Blob;
-  blobURL?: string;
-  startTime?: number;
-  stopTime?: number;
-}
+import UseWindow from "@/hooks/usewindow";
 
 export default function HomePage() {
   const [callId, setCallId] = useState<string | null>(null);
@@ -21,7 +13,9 @@ export default function HomePage() {
   const [debugInfo, setDebugInfo] = useState<string[]>([]);
   const audioChunksRef = useRef<number>(0);
   const audioContextRef = useRef<AudioContext | null>(null);
-
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const window = UseWindow();
   const addDebugMessage = useCallback((message: string) => {
     setDebugInfo((prev) => [message, ...prev].slice(0, 20));
     console.log("Debug:", message);
@@ -36,98 +30,130 @@ export default function HomePage() {
       },
     });
 
+  // Initialize audio context
+  useEffect(() => {
+    if (!audioContextRef.current) {
+      if (!window) return;
+      audioContextRef.current = new (window?.AudioContext ||
+        (window as any).webkitAudioContext)({
+        sampleRate: 8000,
+      });
+      addDebugMessage("Audio context initialized at 8kHz");
+    }
+    return () => {
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
+    };
+  }, []);
+
   // Start recording
-  const startRecording = () => {
-    if (callActive) {
-      setIsRecording(true);
-      addDebugMessage("Recording started");
-    } else {
+  const startRecording = async () => {
+    if (!callActive) {
       addDebugMessage("Cannot start recording - call not active");
+      return;
+    }
+
+    // Ensure audio context is initialized
+    if (!audioContextRef.current) {
+      if (!window) {
+        addDebugMessage("Window is not available");
+        return;
+      }
+      try {
+        audioContextRef.current = new (window.AudioContext ||
+          (window as any).webkitAudioContext)({
+          sampleRate: 8000,
+        });
+        addDebugMessage("Audio context initialized at 8kHz");
+      } catch (error) {
+        addDebugMessage(`Failed to initialize audio context: ${error}`);
+        return;
+      }
+    }
+
+    // Resume audio context if it's in suspended state
+    if (audioContextRef.current.state === "suspended") {
+      await audioContextRef.current.resume();
+      addDebugMessage("Audio context resumed");
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          sampleRate: 8000,
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      });
+
+      mediaStreamRef.current = stream;
+      const audioContext = audioContextRef.current;
+
+      if (!audioContext) {
+        throw new Error("Audio context is not available");
+      }
+
+      // Create source from microphone
+      const source = audioContext.createMediaStreamSource(stream);
+
+      // Create script processor for raw PCM data
+      const processor = audioContext.createScriptProcessor(2048, 1, 1);
+      processorRef.current = processor;
+
+      // Handle audio processing
+      processor.onaudioprocess = (e) => {
+        const inputData = e.inputBuffer.getChannelData(0);
+
+        // Convert Float32Array to Int16Array
+        const samples = new Int16Array(inputData.length);
+        for (let i = 0; i < inputData.length; i++) {
+          // Convert float to 16-bit PCM
+          const s = Math.max(-1, Math.min(1, inputData[i]));
+          samples[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+        }
+
+        // Convert to base64
+        const base64data = Buffer.from(samples.buffer).toString("base64");
+
+        // Send to backend
+        pipe(base64data);
+
+        audioChunksRef.current++;
+        addDebugMessage(
+          `Processed audio chunk ${audioChunksRef.current}: ${samples.length} samples`
+        );
+      };
+
+      // Connect the audio nodes
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+
+      setIsRecording(true);
+      addDebugMessage("Recording started with Web Audio API");
+    } catch (error) {
+      console.error("Error starting recording:", error);
+      addDebugMessage(`Failed to start recording: ${error}`);
     }
   };
 
   // Stop recording
   const stopRecording = () => {
+    if (processorRef.current) {
+      processorRef.current.disconnect();
+      processorRef.current = null;
+    }
+
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+    }
+
     setIsRecording(false);
     addDebugMessage("Recording stopped");
   };
-
-  // Handle audio data from ReactMic
-  const onData = (recordedBlob: Blob) => {
-    if (callActive) {
-      // This gets real-time chunks of audio data
-      audioChunksRef.current += 1;
-
-      // Debug audio information
-      addDebugMessage(
-        `Audio chunk ${audioChunksRef.current} received: ${recordedBlob.size} bytes, type: ${recordedBlob.type}`
-      );
-
-      // Convert blob to base64
-      const reader = new FileReader();
-      reader.readAsDataURL(recordedBlob);
-      reader.onloadend = () => {
-        const base64data = reader.result?.toString().split(",")[1]; // Remove the data URL prefix
-        if (base64data) {
-          addDebugMessage(
-            `Audio converted to base64, length: ${base64data.length} chars`
-          );
-
-          // Send raw audio data - the backend will handle transcription with Deepgram
-          const result = pipe(base64data);
-
-          // Add detailed debug info
-          if (result) {
-            addDebugMessage(
-              `Audio chunk ${audioChunksRef.current} sent successfully (${base64data.length} bytes)`
-            );
-          } else {
-            addDebugMessage(
-              `⚠️ Failed to send audio chunk ${audioChunksRef.current}`
-            );
-          }
-        } else {
-          addDebugMessage(
-            `⚠️ Failed to convert audio to base64 for chunk ${audioChunksRef.current}`
-          );
-        }
-      };
-    }
-  };
-
-  // Handle when recording stops
-  const onStop = (recordedData: {
-    blob: Blob;
-    blobURL: string;
-    startTime: number;
-    stopTime: number;
-  }) => {
-    addDebugMessage(
-      `Recording stopped, final blob size: ${recordedData.blob.size} bytes`
-    );
-  };
-
-  // Initialize audio context on component mount
-  useEffect(() => {
-    // Only create audio context once
-    if (!audioContextRef.current) {
-      try {
-        audioContextRef.current = new AudioContext();
-        addDebugMessage("Audio context initialized");
-      } catch (error) {
-        addDebugMessage(`Failed to initialize audio context: ${error}`);
-      }
-    }
-
-    // Cleanup on unmount
-    return () => {
-      if (audioContextRef.current) {
-        audioContextRef.current.close().catch(console.error);
-        audioContextRef.current = null;
-        addDebugMessage("Audio context closed on unmount");
-      }
-    };
-  }, [addDebugMessage]);
 
   // Set up audio output event listener for simple audio playback
   useEffect(() => {
@@ -252,19 +278,11 @@ export default function HomePage() {
             </div>
 
             <div className="w-full bg-gray-100 p-4 rounded">
-              <ReactMic
-                record={isRecording}
-                onStop={onStop}
-                onData={onData}
-                strokeColor="#000000"
-                backgroundColor="#f5f5f5"
-                className="w-full h-12"
-                mimeType="audio/wav"
-                echoCancellation={true}
-                autoGainControl={true}
-                noiseSuppression={true}
-                channelCount={1}
-              />
+              <div className="w-full h-12 bg-gray-200 relative">
+                {isRecording && (
+                  <div className="absolute inset-0 bg-blue-500 opacity-50 animate-pulse" />
+                )}
+              </div>
             </div>
 
             <div className="flex gap-4">

@@ -246,10 +246,10 @@ export function useInducedCall(
             JSON.stringify({
               event: "audio",
               data: data,
-              format: "audio/wav", // Specify format for Deepgram
-              sampleRate: 16000, // Add sample rate information
-              channels: 1, // Specify mono audio
-              chunk: true, // Indicate this is a chunk of streaming audio
+              format: "audio/l16", // Raw PCM format
+              sampleRate: 8000, // Use telephony standard sample rate
+              channels: 1, // Mono audio
+              chunk: true,
               timestamp: Date.now(),
             })
           );
