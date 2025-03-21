@@ -2,20 +2,17 @@ import WebSocket from "ws";
 import { TelephonyProvider } from "../../../types/providers/telephony";
 import eventBus from "../../../engine";
 import { VoiceCallJobData } from "../../../types/voice-call";
-import alawmulaw from "alawmulaw";
+const alawmulaw = require("alawmulaw");
 
 export class WebSocketProvider implements TelephonyProvider {
   private ws: WebSocket | null = null;
-  private listenerCallback: ((chunk: string) => void) | null = null;
-  private isStarted: boolean = false;
   private id: string;
   private callUuid: string | null = null;
+  private listenerCallback: ((chunk: string) => void) | null = null;
 
   constructor(id: string) {
     this.id = id;
-    console.log(`WebSocketProvider created with ID: ${id}`);
 
-    // Subscribe to audio chunk events
     eventBus.on("call.audio.chunk.synthesized", (event) => {
       if (event.ctx.callId === this.id && event.data.chunk) {
         this.send(
@@ -32,14 +29,9 @@ export class WebSocketProvider implements TelephonyProvider {
   }
 
   setWsObject(ws: WebSocket) {
-    console.log(`Setting WebSocket object for call ID: ${this.id}`);
     this.ws = ws;
     this.setupWebSocket();
 
-    // Immediately mark as started without emitting an event
-    this.isStarted = true;
-
-    // Send a confirmation to the client that we're connected
     try {
       this.ws.send(
         JSON.stringify({
@@ -48,7 +40,6 @@ export class WebSocketProvider implements TelephonyProvider {
         })
       );
 
-      // Emit an event to signal that the WebSocket connection is ready
       eventBus.emit("websocket.ready", {
         ctx: {
           callId: this.id,
@@ -59,160 +50,94 @@ export class WebSocketProvider implements TelephonyProvider {
           status: "connected",
         },
       });
-    } catch (error) {
-      console.error(
-        `Error sending connection confirmation for call ${this.id}:`,
-        error
-      );
-    }
+    } catch (error) {}
   }
 
   private setupWebSocket() {
     if (!this.ws) return;
 
-    console.log(
-      `Setting up WebSocket for call ID: ${this.id}, isStarted=${this.isStarted}`
-    );
-
-    this.isStarted = true;
-
     this.ws.on("message", (data: Buffer) => {
       try {
         const message = JSON.parse(data.toString());
-        console.log(
-          `WebSocket message received for call ${this.id}, event: ${
-            message.event
-          }, data length: ${message.data?.length || 0}`
-        );
 
         if (message.event === "audio") {
-          console.log(`Received audio data for call ${this.id}, processing...`);
-
           if (!message.data || typeof message.data !== "string") {
-            console.error(
-              `Invalid audio data format for call ${this.id}:`,
-              message.data
-            );
             throw new Error("Invalid audio data format");
           }
 
           try {
-            // Decode base64 to get the binary audio data
             const audioBuffer = Buffer.from(message.data, "base64");
-            console.log(
-              `Received audio chunk size: ${audioBuffer.length} bytes for call ${this.id}`
-            );
 
-            // Validate audio buffer
             if (audioBuffer.length === 0) {
-              console.warn(`Received empty audio buffer for call ${this.id}`);
               return;
             }
 
-            // Check if we have actual audio data
             const hasAudio = audioBuffer.some((byte) => byte !== 0);
             if (!hasAudio) {
-              console.warn(`Received silent audio buffer for call ${this.id}`);
               return;
             }
 
-            // Convert audio to A-Law format if needed
-            let processedAudio = message.data;
-            if (
-              message.format === "audio/wav" ||
-              message.format === "audio/pcm"
-            ) {
-              try {
-                console.log(
-                  `Converting ${message.format} to A-Law encoding for call ${this.id}`
-                );
-                processedAudio = this.encodeAudio(audioBuffer);
-                console.log(
-                  `Encoded audio with A-Law, original size: ${audioBuffer.length}`
-                );
-              } catch (encodeError) {
-                console.error(
-                  `Error encoding audio with A-Law: ${encodeError}`
-                );
-                // Continue with original audio data
-                console.log(
-                  `Using original ${message.format} audio data for call ${this.id}`
-                );
-              }
-            } else {
-              console.log(
-                `Using original audio format (${
-                  message.format || "unknown"
-                }) for call ${this.id}`
-              );
-            }
-
-            if (this.listenerCallback) {
-              console.log(
-                `Forwarding audio chunk to listener for call ${this.id}`
-              );
-              this.listenerCallback(processedAudio);
-            }
-
-            // Store audio format info for debugging
-            const audioFormat = message.format || "audio/wav";
-            const sampleRate = message.sampleRate || 16000;
+            const audioFormat = message.format || "audio/l16";
+            const sourceSampleRate = message.sampleRate || 8000;
+            const targetSampleRate = 8000;
             const channels = message.channels || 1;
 
-            console.log(
-              `Audio info for call ${this.id}: format=${audioFormat}, sampleRate=${sampleRate}, channels=${channels}`
-            );
+            let processedAudio;
 
-            // Emit event with essential audio metadata
-            console.log(
-              `Emitting audio.chunk.received event for call ${this.id}`
-            );
-            eventBus.emit("call.audio.chunk.received", {
-              ctx: {
-                callId: this.id,
-                provider: "websocket",
-                timestamp: Date.now(),
-              },
-              data: {
-                chunk: processedAudio,
-                direction: "inbound",
-              },
-            });
-
-            if (message.text) {
-              console.log(
-                `Received transcription for call ${this.id}: ${message.text}`
+            try {
+              let samples = new Int16Array(
+                audioBuffer.buffer,
+                audioBuffer.byteOffset,
+                audioBuffer.byteLength / 2
               );
-              eventBus.emit("call.transcription.chunk.created", {
+
+              if (sourceSampleRate !== targetSampleRate) {
+                if (sourceSampleRate > targetSampleRate) {
+                  const ratio = Math.floor(sourceSampleRate / targetSampleRate);
+                  const resampledLength = Math.floor(samples.length / ratio);
+                  const resampledSamples = new Int16Array(resampledLength);
+
+                  for (let i = 0; i < resampledLength; i++) {
+                    resampledSamples[i] = samples[i * ratio];
+                  }
+
+                  samples = resampledSamples;
+                  console.log(
+                    `Downsampled to ${samples.length} samples for call ${this.id}`
+                  );
+                }
+              }
+
+              processedAudio = this.encodeToMuLaw(samples);
+
+              eventBus.emit("call.audio.chunk.received", {
                 ctx: {
                   callId: this.id,
                   provider: "websocket",
                   timestamp: Date.now(),
                 },
                 data: {
-                  transcription: message.text,
+                  chunk: Buffer.from(processedAudio).toString("base64"),
+                  direction: "inbound",
                 },
               });
 
-              eventBus.emit("call.speech.detected", {
-                ctx: {
-                  callId: this.id,
-                },
-                data: {
-                  transcription: message.text,
-                },
-              });
+              console.log(
+                `Audio chunk processed successfully for call ${this.id} - μ-law at ${targetSampleRate}Hz`
+              );
+
+              const firstFewBytes = Buffer.from(processedAudio).slice(0, 10);
+              console.log(`First bytes of μ-law audio: ${[...firstFewBytes]}`);
+            } catch (encodeError) {
+              console.error(`Error encoding audio to μ-Law: ${encodeError}`);
+              throw encodeError;
             }
-
-            console.log(
-              `Audio chunk processed successfully for call ${this.id}`
-            );
           } catch (e) {
             console.error(
               `Error processing audio chunk for call ${this.id}:`,
               e
             );
-            throw new Error("Invalid base64 audio data");
+            throw new Error("Invalid audio data");
           }
         } else if (message.event === "call.started") {
           console.log(`Call.started event received for call ID: ${this.id}`);
@@ -223,7 +148,6 @@ export class WebSocketProvider implements TelephonyProvider {
             })
           );
 
-          // Emit call.initiated event similar to Plivo
           eventBus.emit("call.initiated", {
             ctx: {
               callId: this.id,
@@ -281,43 +205,69 @@ export class WebSocketProvider implements TelephonyProvider {
     });
   }
 
-  private encodeAudio(
-    audioBuffer: Buffer,
-    format: "alaw" | "mulaw" = "alaw"
-  ): string {
+  private encodeToMuLaw(input: Buffer | Int16Array): Buffer {
     try {
-      // Create Int16Array view of the buffer for encoding
-      const samples = new Int16Array(
-        audioBuffer.buffer,
-        audioBuffer.byteOffset,
-        audioBuffer.byteLength / 2
-      );
+      // Convert input to Int16Array if it's a Buffer
+      let samples: Int16Array;
+      if (Buffer.isBuffer(input)) {
+        console.log(`Converting Buffer to Int16Array, length: ${input.length}`);
+        samples = new Int16Array(
+          input.buffer,
+          input.byteOffset,
+          input.byteLength / 2
+        );
+        console.log(`Created Int16Array with ${samples.length} samples`);
+      } else {
+        // Input is already Int16Array
+        samples = input;
+        console.log(`Using provided Int16Array with ${samples.length} samples`);
+      }
 
       let encodedData;
 
-      // Encode to either A-Law or mu-Law based on the format parameter
-      if (format === "alaw") {
-        encodedData = alawmulaw.alaw.encode(samples);
-        console.log(
-          `Encoded audio with A-Law encoding, original size: ${audioBuffer.length}`
-        );
-      } else {
-        encodedData = alawmulaw.mulaw.encode(samples);
-        console.log(
-          `Encoded audio with mu-Law encoding, original size: ${audioBuffer.length}`
-        );
+      // Use only the library implementation
+      try {
+        if (alawmulaw && alawmulaw.mulaw) {
+          console.log(
+            `Using alawmulaw library to encode ${samples.length} samples to μ-law`
+          );
+          encodedData = alawmulaw.mulaw.encode(samples);
+          console.log(
+            `Successfully encoded to μ-law using library, result length: ${encodedData.length}`
+          );
+        } else {
+          throw new Error("alawmulaw library is required but not available");
+        }
+      } catch (libraryError) {
+        console.error(`Error using μ-Law library: ${libraryError}`);
+        throw libraryError; // Re-throw to prevent fallback to custom implementation
       }
 
-      // Convert back to base64 and return
-      return Buffer.from(encodedData).toString("base64");
+      // Return the raw μ-law data as Buffer for use with Deepgram
+      const result = Buffer.from(encodedData.buffer);
+      console.log(
+        `Returning μ-law encoded buffer with size: ${result.length} bytes`
+      );
+      return result;
     } catch (error) {
-      console.error(`Error encoding to ${format}: ${error}`);
-      // Return original data as fallback
-      return audioBuffer.toString("base64");
+      console.error(`Error encoding to μ-Law: ${error}`);
+
+      // Return original data as fallback if it's a buffer
+      if (Buffer.isBuffer(input)) {
+        console.log(
+          `Returning original buffer as fallback, length: ${input.length}`
+        );
+        return input;
+      }
+      // Or convert Int16Array to Buffer
+      console.log(
+        `Returning original Int16Array as Buffer fallback, length: ${input.length}`
+      );
+      return Buffer.from(input.buffer);
     }
   }
 
-  public async send(audioData: string): Promise<void> {
+  public async send(audioData: string | Buffer): Promise<void> {
     if (!this.ws) {
       console.log(`WebSocket not connected for call ${this.id}`);
       return;
@@ -326,11 +276,22 @@ export class WebSocketProvider implements TelephonyProvider {
     try {
       console.log(`Preparing to send audio data for call ${this.id}`);
 
-      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(audioData)) {
+      // Convert to string if buffer
+      const dataToSend = Buffer.isBuffer(audioData)
+        ? audioData.toString("base64")
+        : audioData;
+
+      if (
+        typeof dataToSend === "string" &&
+        !/^[A-Za-z0-9+/]*={0,2}$/.test(dataToSend)
+      ) {
         throw new Error("Invalid base64 data received");
       }
 
-      const audioBuffer = Buffer.from(audioData, "base64");
+      const audioBuffer = Buffer.isBuffer(audioData)
+        ? audioData
+        : Buffer.from(audioData, "base64");
+
       console.log(
         `Sending audio data of size ${audioBuffer.length} bytes for call ${this.id}`
       );
@@ -339,7 +300,9 @@ export class WebSocketProvider implements TelephonyProvider {
         this.ws.send(
           JSON.stringify({
             event: "audio.out",
-            data: audioData,
+            data: dataToSend,
+            format: "audio/x-mulaw",
+            sampleRate: 8000,
             timestamp: Date.now(),
           })
         );
@@ -391,7 +354,6 @@ export class WebSocketProvider implements TelephonyProvider {
     }
 
     this.listenerCallback = null;
-    this.isStarted = false;
   }
 
   public async transfer(toNumber: string): Promise<void> {
