@@ -71,7 +71,7 @@ export class DeepgramSTTService implements STTService {
       });
 
       this.connection.on(LiveTranscriptionEvents.Error, (error: any) => {
-        console.error("❌ Deepgram STT Error:", error);
+        console.error("Error in Deepgram STT:", error);
       });
 
       this.connection.on(LiveTranscriptionEvents.Open, () => {
@@ -79,11 +79,9 @@ export class DeepgramSTTService implements STTService {
       });
 
       this.connection.on(LiveTranscriptionEvents.Close, () => {
-        console.log("🎙️ Deepgram STT: Connection closed");
         this.isInitialized = false;
       });
     } catch (error) {
-      console.error("❌ Failed to initialize Deepgram connection:", error);
       throw error;
     }
   }
@@ -94,9 +92,10 @@ export class DeepgramSTTService implements STTService {
     }
 
     try {
-      this.connection.send(Buffer.from(chunk, "base64"));
+      const audioBuffer = Buffer.from(chunk, "base64");
+      this.connection.send(audioBuffer, { binary: true });
     } catch (error) {
-      console.error("❌ Error processing audio chunk:", error);
+      console.error("Error sending audio to Deepgram:", error);
     }
   }
 
@@ -105,7 +104,7 @@ export class DeepgramSTTService implements STTService {
       try {
         this.connection.finish();
       } catch (error) {
-        console.error("❌ Error closing STT connection:", error);
+        console.error("Error closing Deepgram connection:", error);
       } finally {
         this.connection = null;
         this.isInitialized = false;
