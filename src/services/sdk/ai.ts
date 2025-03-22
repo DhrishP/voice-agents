@@ -8,6 +8,7 @@ import { z } from "zod";
 import eventBus from "../../events";
 import prisma from "../../db/client";
 import { TranscriptType } from "@prisma/client";
+import { DTMFService } from "../audio/dtmf";
 
 export class SDKServices {
   private google: GoogleGenerativeAIProvider;
@@ -53,7 +54,7 @@ export class SDKServices {
       }
       const { textStream } = await streamText({
         model: providerModel,
-        messages: history,
+        messages:history,
         tools: {
           hangupcall: tool({
             description: "Hang up the call",
@@ -93,20 +94,51 @@ export class SDKServices {
               };
             },
           }),
+          dtmf: tool({
+            description:
+              "Generate DTMF tones for a sequence of numbers or symbols (0-9, *, #, A-D)",
+            parameters: z.object({
+              sequence: z
+                .string()
+                .describe(
+                  "The sequence of numbers/symbols to generate DTMF tones for"
+                ),
+              reason: z
+                .string()
+                .describe("The reason for generating DTMF tones"),
+            }),
+            execute: async ({ sequence, reason }) => {
+              const dtmfService = DTMFService.getInstance();
+              const result = await dtmfService.generateTones({
+                sequence,
+                callId,
+              });
+              if (!result.success) {
+                return {
+                  success: false,
+                  message: result.message,
+                };
+              }
+
+              return {
+                success: result.success,
+                message: result.message,
+              };
+            },
+          }),
         },
         onFinish: async ({ text, toolResults, usage }) => {
           if (toolResults.length) {
-            console.log("hi");
-            history.push({
-              role: "tool",
-              content: toolResults[0].args.reason as any,
-            });
             await prisma.transcript.create({
               data: {
                 callId: callId,
                 type: TranscriptType.TOOL,
-                transcript: toolResults[0].args.reason as any,
+                transcript: text,
               },
+            });
+            history.push({
+              role: "assistant",
+              content: `[${toolResults[0].toolName}] : ${toolResults[0].args.reason}`,
             });
           } else {
             history.push({ role: "assistant", content: text });
