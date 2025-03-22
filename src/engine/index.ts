@@ -451,6 +451,26 @@ eventBus.on("call.speech.detected", async (event) => {
   }
 });
 
+eventBus.on("call.dtmf.tone.generated", async (event) => {
+  const { ctx, data } = event;
+  console.log(`[DTMF Engine] Processing DTMF sequence for call ${ctx.callId}`);
+  console.log(`[DTMF Engine] Sequence: ${data.sequence}`);
+  console.log(`[DTMF Engine] Frequencies used:`, data.frequencies);
+  console.log(`[DTMF Engine] Buffer size: ${data.buffer.length} bytes`);
+
+  const phoneCall = telephonyEngines[ctx.callId];
+
+  if (phoneCall) {
+    console.log(`[DTMF Engine] Sending DTMF buffer through telephony engine`);
+    await phoneCall.send(data.buffer);
+    console.log(`[DTMF Engine] DTMF buffer sent successfully`);
+  } else {
+    console.error(
+      `[DTMF Engine] No telephony engine found for call ${ctx.callId}`
+    );
+  }
+});
+
 eventBus.on("websocket.ready", async (event) => {
   const { ctx } = event;
   console.log(`📱 WebSocket connection ready for call ${ctx.callId}`);

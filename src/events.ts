@@ -86,6 +86,14 @@ interface AppEvents extends EventMap {
       tone: DTMFTone;
     };
   };
+  "call.dtmf.tone.generated": {
+    ctx: { callId: string; timestamp: number };
+    data: {
+      buffer: Buffer;
+      sequence: string;
+      frequencies: Array<{ digit: string; frequencies: number[] }>;
+    };
+  };
 }
 
 const eventBus = EventBus.getInstance<AppEvents>();
