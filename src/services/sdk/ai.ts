@@ -9,6 +9,10 @@ import eventBus from "../../events";
 import prisma from "../../db/client";
 import { TranscriptType } from "@prisma/client";
 import { DTMFService } from "../audio/dtmf";
+import {
+  DEFAULT_AUDIO_FORMAT,
+  DEFAULT_AUDIO_FORMAT_PCM_S16LE,
+} from "../../lib/audio/format";
 
 export class SDKServices {
   private google: GoogleGenerativeAIProvider;
@@ -36,11 +40,13 @@ export class SDKServices {
     provider,
     history,
     callId,
+    telephonyProvider,
   }: {
     model: string;
     provider: string;
     history: CoreMessage[];
     callId: string;
+    telephonyProvider: "twilio" | "plivo" | "websocket";
   }) {
     try {
       const providerModel =
@@ -54,7 +60,7 @@ export class SDKServices {
       }
       const { textStream } = await streamText({
         model: providerModel,
-        messages:history,
+        messages: history,
         tools: {
           hangupcall: tool({
             description: "Hang up the call",
@@ -80,6 +86,12 @@ export class SDKServices {
                 .describe("The reason for transferring the call"),
             }),
             execute: async ({ reason }) => {
+              if (telephonyProvider === "websocket") {
+                return {
+                  success: true,
+                  message: "returned to websocket",
+                };
+              }
               eventBus.emit("call.transfer.requested", {
                 ctx: { callId: callId },
                 data: {
@@ -96,7 +108,7 @@ export class SDKServices {
           }),
           dtmf: tool({
             description:
-              "Generate DTMF tones for a sequence of numbers or symbols (0-9, *, #, A-D)",
+              "Generate DTMF tones for a sequence of numbers or symbols (0-9, *, #, A-D) or whenever the user says to dial. dont ask reason for dialing",
             parameters: z.object({
               sequence: z
                 .string()
@@ -109,14 +121,27 @@ export class SDKServices {
             }),
             execute: async ({ sequence, reason }) => {
               const dtmfService = DTMFService.getInstance();
-              const result = await dtmfService.generateTones({
-                sequence,
-                callId,
-              });
-              if (!result.success) {
+              let result;
+              console.log("provider", telephonyProvider);
+              if (telephonyProvider === "twilio") {
+                console.log("Generating DTMF tones for twilio");
+                result = await dtmfService.generateTones({
+                  sequence,
+                  callId,
+                  audioFormat: DEFAULT_AUDIO_FORMAT,
+                });
+              } else if (telephonyProvider === "plivo") {
+                console.log("Generating DTMF tones for plivo");
+                result = await dtmfService.generateTones({
+                  sequence,
+                  callId,
+                  audioFormat: DEFAULT_AUDIO_FORMAT_PCM_S16LE,
+                });
+              }
+              if (!result?.success) {
                 return {
                   success: false,
-                  message: result.message,
+                  message: result?.message || "Failed to generate DTMF tones",
                 };
               }
 

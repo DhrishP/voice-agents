@@ -13,16 +13,19 @@ export class LLMService implements AIService {
   private model: string;
   private provider: string;
   private sdkService: SDKServices;
+  private telephonyProvider: string;
   constructor(
     id: string,
     history: CoreMessage[],
     model: string,
-    provider: string
+    provider: string,
+    telephonyProvider: string
   ) {
     this.id = id;
     this.history = this.normalizeMessageHistory(history);
     this.model = model;
     this.provider = provider;
+    this.telephonyProvider = telephonyProvider;
     this.sdkService = new SDKServices();
   }
 
@@ -90,6 +93,10 @@ export class LLMService implements AIService {
       provider: this.provider,
       history: this.history,
       callId: this.id,
+      telephonyProvider: this.telephonyProvider as
+        | "twilio"
+        | "plivo"
+        | "websocket",
     });
 
     if (textStream) {

@@ -130,7 +130,8 @@ class PhoneCall {
         this.id,
         this.history,
         this.payload.llmModel,
-        this.payload.llmProvider
+        this.payload.llmProvider,
+        this.payload.telephonyProvider
       );
       await llmEngine.initialize();
 
