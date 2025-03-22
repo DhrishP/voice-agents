@@ -1,4 +1,4 @@
-import { DEFAULT_AUDIO_FORMAT } from "../../lib/audio/format";
+import { AudioFormat, DEFAULT_AUDIO_FORMAT } from "../../lib/audio/format";
 import {
   generateDTMFSequence,
   type DTMFTone,
@@ -21,9 +21,11 @@ export class DTMFService {
   public async generateTones({
     sequence,
     callId,
+    audioFormat = DEFAULT_AUDIO_FORMAT,
   }: {
     sequence: string;
     callId: string;
+    audioFormat?: AudioFormat;
   }): Promise<{
     success: boolean;
     message: string;
@@ -65,12 +67,11 @@ export class DTMFService {
         sequence: validChars,
         toneDurationMs: 100, // Standard DTMF tone duration
         pauseDurationMs: 50, // Standard DTMF pause duration
-        audioFormat: DEFAULT_AUDIO_FORMAT,
+        audioFormat: audioFormat,
       });
 
       console.log(`[DTMF] Generated buffer size: ${buffer.length} bytes`);
 
-      // Attach the sequence data to the buffer
       (buffer as any).eventData = {
         sequence: validChars.join(""),
         frequencies,

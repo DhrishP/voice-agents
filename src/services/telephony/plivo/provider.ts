@@ -147,17 +147,40 @@ export class PlivoProvider implements TelephonyProvider {
     try {
       // If it's a Buffer and we detect it's a DTMF tone
       if (Buffer.isBuffer(audioData)) {
-        if (this.callUuid) {
-          // Use Plivo's native DTMF API
-          await PlivoProvider.plivoClient.calls.sendDtmf(this.callUuid, {
-            digits: audioData.toString("base64"),
-          });
-          console.log("[Plivo Provider] Sent DTMF tones using native API");
+        // The event data should be attached to the buffer
+        const eventData = (audioData as any).eventData;
+        if (eventData?.sequence && typeof eventData.sequence === "string") {
+          console.log(
+            `[Plivo Provider] Sending DTMF sequence: ${eventData.sequence}`
+          );
+
+          try {
+            // Send DTMF as PCM 16-bit audio
+            const audioMessage = {
+              event: "playAudio",
+              media: {
+                contentType: "audio/x-l16",
+                sampleRate: 8000,
+                payload: audioData.toString("base64"),
+              },
+            };
+            this.ws.send(JSON.stringify(audioMessage));
+            console.log(
+              `[Plivo Provider] Sent DTMF sequence: ${eventData.sequence}`
+            );
+            return;
+          } catch (dtmfError) {
+            console.error("[Plivo Provider] Error sending DTMF:", dtmfError);
+          }
+        } else {
+          console.error(
+            "[Plivo Provider] No DTMF sequence found in event data"
+          );
           return;
         }
       }
 
-      // Regular audio streaming
+      // Regular audio streaming (keep as µ-law for non-DTMF audio)
       const audioMessage = {
         event: "playAudio",
         media: {

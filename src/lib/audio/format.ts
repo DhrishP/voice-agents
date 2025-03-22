@@ -9,3 +9,9 @@ export const DEFAULT_AUDIO_FORMAT: AudioFormat = {
   channels: 1,
   format: "mulaw",
 };
+
+export const DEFAULT_AUDIO_FORMAT_PCM_S16LE: AudioFormat = {
+  sampleRate: 8000,
+  channels: 1,
+  format: "pcm_s16le",
+};

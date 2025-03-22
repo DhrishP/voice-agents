@@ -20,6 +20,9 @@ export const dtmfFrequencies = {
   D: [941, 1633],
 } as const;
 
+export const dmtfKeys = Object.keys(
+  dtmfFrequencies
+) as (keyof typeof dtmfFrequencies)[];
 export type DTMFTone = keyof typeof dtmfFrequencies;
 
 export function generateDTMFTone(args: {
