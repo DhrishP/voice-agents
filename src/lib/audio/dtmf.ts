@@ -1,4 +1,5 @@
 import { type AudioFormat } from "./format";
+const alawmulaw = require("alawmulaw");
 
 export const dtmfFrequencies = {
   "1": [697, 1209],
@@ -49,13 +50,29 @@ export function generateDTMFTone(args: {
     samples[i] = sample * 0.5; // Mix at 50% volume to prevent clipping
   }
 
+  // Convert float samples to Int16Array first
+  const pcmSamples = new Int16Array(
+    samples.map((s) => Math.max(-32768, Math.min(32767, s * 32767)))
+  );
+
   let buffer: Buffer;
   if (args.audioFormat.format === "pcm_s16le") {
-    buffer = Buffer.from(
-      new Int16Array(
-        samples.map((s) => Math.max(-32768, Math.min(32767, s * 32767)))
-      ).buffer
-    );
+    buffer = Buffer.from(pcmSamples.buffer);
+  } else if (args.audioFormat.format === "mulaw") {
+    try {
+      console.log(
+        `[DTMF Generator] Encoding ${pcmSamples.length} samples to μ-law`
+      );
+      const mulawData = alawmulaw.mulaw.encode(pcmSamples);
+      buffer = Buffer.from(mulawData.buffer);
+      console.log(
+        `[DTMF Generator] Successfully encoded to μ-law, result length: ${buffer.length}`
+      );
+    } catch (error) {
+      console.error(`[DTMF Generator] Error encoding to μ-law:`, error);
+      // Fallback to PCM
+      buffer = Buffer.from(pcmSamples.buffer);
+    }
   } else {
     buffer = Buffer.from(
       new Uint8Array(
@@ -93,10 +110,8 @@ export function generateDTMFSequence(args: {
 
   console.log(`[DTMF Sequence] Total samples to generate: ${totalSamples}`);
 
-  const samples =
-    args.audioFormat.format === "pcm_s16le"
-      ? new Int16Array(totalSamples)
-      : new Uint8Array(totalSamples);
+  // Always generate as PCM first
+  const samples = new Int16Array(totalSamples);
   let offset = 0;
 
   for (const tone of args.sequence) {
@@ -105,23 +120,14 @@ export function generateDTMFSequence(args: {
     const toneBuffer = generateDTMFTone({
       tone,
       durationMs: args.toneDurationMs,
-      audioFormat: args.audioFormat,
+      audioFormat: { ...args.audioFormat, format: "pcm_s16le" }, // Generate as PCM first
     });
 
-    let toneSamples: Int16Array | Uint8Array;
-    if (args.audioFormat.format === "pcm_s16le") {
-      toneSamples = new Int16Array(
-        toneBuffer.buffer,
-        toneBuffer.byteOffset,
-        toneBuffer.length / 2
-      );
-    } else {
-      toneSamples = new Uint8Array(
-        toneBuffer.buffer,
-        toneBuffer.byteOffset,
-        toneBuffer.length
-      );
-    }
+    const toneSamples = new Int16Array(
+      toneBuffer.buffer,
+      toneBuffer.byteOffset,
+      toneBuffer.length / 2
+    );
 
     samples.set(toneSamples, offset);
     offset += toneSamples.length;
@@ -129,11 +135,7 @@ export function generateDTMFSequence(args: {
     const pauseSamples = Math.round(
       (args.pauseDurationMs * args.audioFormat.sampleRate) / 1000
     );
-    samples.fill(
-      args.audioFormat.format === "pcm_s16le" ? 0 : 128,
-      offset,
-      offset + pauseSamples
-    );
+    samples.fill(0, offset, offset + pauseSamples);
     offset += pauseSamples;
 
     console.log(
@@ -141,7 +143,24 @@ export function generateDTMFSequence(args: {
     );
   }
 
-  const buffer = Buffer.from(samples.buffer);
-  console.log(`[DTMF Sequence] Final buffer size: ${buffer.length} bytes`);
-  return buffer;
+  let finalBuffer: Buffer;
+  if (args.audioFormat.format === "mulaw") {
+    try {
+      console.log(`[DTMF Sequence] Encoding complete sequence to μ-law`);
+      const mulawData = alawmulaw.mulaw.encode(samples);
+      finalBuffer = Buffer.from(mulawData.buffer);
+      console.log(
+        `[DTMF Sequence] Successfully encoded sequence to μ-law, result length: ${finalBuffer.length}`
+      );
+    } catch (error) {
+      console.error(`[DTMF Sequence] Error encoding sequence to μ-law:`, error);
+      // Fallback to PCM
+      finalBuffer = Buffer.from(samples.buffer);
+    }
+  } else {
+    finalBuffer = Buffer.from(samples.buffer);
+  }
+
+  console.log(`[DTMF Sequence] Final buffer size: ${finalBuffer.length} bytes`);
+  return finalBuffer;
 }
