@@ -110,14 +110,58 @@ export class TwilioProvider implements TelephonyProvider {
     });
   }
 
-  public async send(audioData: string): Promise<void> {
+  public async send(audioData: string | Buffer): Promise<void> {
     if (!this.ws) {
       console.log("WebSocket not connected");
       return;
     }
 
     try {
-      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(audioData)) {
+      // If it's a Buffer and we detect it's a DTMF tone
+      if (Buffer.isBuffer(audioData)) {
+        if (this.callSid) {
+          // The event data should be attached to the buffer
+          const eventData = (audioData as any).eventData;
+          console.log(eventData, "eventData");
+          if (eventData?.sequence && typeof eventData.sequence === "string") {
+            console.log(
+              `[Twilio Provider] Sending DTMF sequence: ${eventData.sequence}`
+            );
+
+            try {
+              this.ws.send(
+                JSON.stringify({
+                  event: "media",
+                  streamSid: this.sid,
+                  media: {
+                    payload: audioData.toString("base64"),
+                  },
+                })
+              );
+              console.log(
+                `[Twilio Provider] Sent DTMF sequence: ${eventData.sequence}`
+              );
+              return;
+            } catch (dtmfError) {
+              console.error("[Twilio Provider] Error sending DTMF:", dtmfError);
+            }
+          } else {
+            console.error(
+              "[Twilio Provider] No DTMF sequence found in event data"
+            );
+            return;
+          }
+        } else {
+          console.error("[Twilio Provider] No callSid available for DTMF");
+          return;
+        }
+      }
+
+      // Regular audio streaming
+      if (
+        typeof audioData === "string" &&
+        !/^[A-Za-z0-9+/]*={0,2}$/.test(audioData)
+      ) {
         throw new Error("Invalid base64 data received");
       }
 
@@ -126,12 +170,15 @@ export class TwilioProvider implements TelephonyProvider {
           event: "media",
           streamSid: this.sid,
           media: {
-            payload: audioData,
+            payload:
+              typeof audioData === "string"
+                ? audioData
+                : audioData.toString("base64"),
           },
         })
       );
     } catch (error) {
-      console.error("Error sending audio:", error);
+      console.error("Error sending audio/DTMF:", error);
       console.error(error);
     }
   }

@@ -138,25 +138,41 @@ export class PlivoProvider implements TelephonyProvider {
     });
   }
 
-  public async send(audioData: string): Promise<void> {
+  public async send(audioData: string | Buffer): Promise<void> {
     if (!this.ws) {
       console.log("WebSocket not connected");
       return;
     }
 
     try {
+      // If it's a Buffer and we detect it's a DTMF tone
+      if (Buffer.isBuffer(audioData)) {
+        if (this.callUuid) {
+          // Use Plivo's native DTMF API
+          await PlivoProvider.plivoClient.calls.sendDtmf(this.callUuid, {
+            digits: audioData.toString("base64"),
+          });
+          console.log("[Plivo Provider] Sent DTMF tones using native API");
+          return;
+        }
+      }
+
+      // Regular audio streaming
       const audioMessage = {
         event: "playAudio",
         media: {
           contentType: "audio/x-mulaw",
           sampleRate: 8000,
-          payload: audioData,
+          payload:
+            typeof audioData === "string"
+              ? audioData
+              : audioData.toString("base64"),
         },
       };
 
       this.ws.send(JSON.stringify(audioMessage));
     } catch (error) {
-      console.error("Error sending audio to Plivo:", error);
+      console.error("Error sending audio/DTMF to Plivo:", error);
     }
   }
 
