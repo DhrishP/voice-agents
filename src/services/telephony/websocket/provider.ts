@@ -3,7 +3,6 @@ import { TelephonyProvider } from "../../../types/providers/telephony";
 import eventBus from "../../../engine";
 import { VoiceCallJobData } from "../../../types/voice-call";
 const alawmulaw = require("alawmulaw");
-
 export class WebSocketProvider implements TelephonyProvider {
   private ws: WebSocket | null = null;
   private id: string;
@@ -12,16 +11,6 @@ export class WebSocketProvider implements TelephonyProvider {
 
   constructor(id: string) {
     this.id = id;
-
-    eventBus.on("call.audio.chunk.synthesized", (event) => {
-      if (event.ctx.callId === this.id && event.data.chunk) {
-        this.send(
-          typeof event.data.chunk === "string"
-            ? event.data.chunk
-            : event.data.chunk.toString("base64")
-        );
-      }
-    });
   }
 
   async validateInput(payload: VoiceCallJobData): Promise<boolean> {
@@ -29,6 +18,16 @@ export class WebSocketProvider implements TelephonyProvider {
   }
 
   setWsObject(ws: WebSocket) {
+    console.log(
+      `[${this.id}] setWsObject called, previous ws state:`,
+      this.ws?.readyState
+    );
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      console.log(
+        `[${this.id}] Warning: Attempting to set new WebSocket while existing one is still open`
+      );
+      return;
+    }
     this.ws = ws;
     this.setupWebSocket();
 
@@ -38,6 +37,10 @@ export class WebSocketProvider implements TelephonyProvider {
           event: "call.connected",
           message: "WebSocket connection successfully established",
         })
+      );
+      console.log(
+        `[${this.id}] WebSocket connection established, current state:`,
+        this.ws.readyState
       );
 
       eventBus.emit("websocket.ready", {
@@ -50,11 +53,20 @@ export class WebSocketProvider implements TelephonyProvider {
           status: "connected",
         },
       });
-    } catch (error) {}
+    } catch (error) {
+      console.error(`[${this.id}] Error in setWsObject:`, error);
+    }
   }
 
   private setupWebSocket() {
-    if (!this.ws) return;
+    if (!this.ws) {
+      console.log(`[${this.id}] setupWebSocket called but this.ws is null`);
+      return;
+    }
+    console.log(
+      `[${this.id}] Setting up WebSocket handlers, current state:`,
+      this.ws.readyState
+    );
 
     this.ws.on("message", (data: Buffer) => {
       try {
@@ -103,7 +115,7 @@ export class WebSocketProvider implements TelephonyProvider {
 
                   samples = resampledSamples;
                   console.log(
-                    `Downsampled to ${samples.length} samples for call ${this.id}`
+                    `[${this.id}] Downsampled to ${samples.length} samples`
                   );
                 }
               }
@@ -121,59 +133,21 @@ export class WebSocketProvider implements TelephonyProvider {
                   direction: "inbound",
                 },
               });
-
-              console.log(
-                `Audio chunk processed successfully for call ${this.id} - μ-law at ${targetSampleRate}Hz`
-              );
-
-              const firstFewBytes = Buffer.from(processedAudio).slice(0, 10);
-              console.log(`First bytes of μ-law audio: ${[...firstFewBytes]}`);
             } catch (encodeError) {
-              console.error(`Error encoding audio to μ-Law: ${encodeError}`);
+              console.error(
+                `[${this.id}] Error encoding audio to μ-Law:`,
+                encodeError
+              );
               throw encodeError;
             }
           } catch (e) {
-            console.error(
-              `Error processing audio chunk for call ${this.id}:`,
-              e
-            );
+            console.error(`[${this.id}] Error processing audio chunk:`, e);
             throw new Error("Invalid audio data");
           }
-        } else if (message.event === "call.started") {
-          console.log(`Call.started event received for call ID: ${this.id}`);
-          this.ws?.send(
-            JSON.stringify({
-              event: "call.connected",
-              message: "WebSocket connection established and ready for audio",
-            })
-          );
-
-          eventBus.emit("call.initiated", {
-            ctx: {
-              callId: this.id,
-              provider: "websocket",
-              timestamp: Date.now(),
-            },
-            payload: {
-              callId: this.id,
-              telephonyProvider: "websocket",
-              prompt:
-                "You are a helpful voice assistant. Keep your responses concise and clear. Answer the user's questions helpfully.",
-              fromNumber: "+15555555555",
-              toNumber: "+15555555555",
-              llmProvider: "openai",
-              llmModel: "gpt-4o",
-              sttProvider: "deepgram",
-              sttModel: "nova-2",
-              ttsProvider: "elevenlabs",
-              ttsModel: "eleven_multilingual_v2",
-              language: "en-US",
-            },
-          });
         }
       } catch (error: any) {
         console.error(
-          `Error processing WebSocket message for call ${this.id}:`,
+          `[${this.id}] Error processing WebSocket message:`,
           error
         );
 
@@ -187,7 +161,7 @@ export class WebSocketProvider implements TelephonyProvider {
     });
 
     this.ws.on("error", (error) => {
-      console.error(`WebSocket error for call ${this.id}:`, error);
+      console.error(`[${this.id}] WebSocket error:`, error);
       eventBus.emit("call.error", {
         ctx: { callId: this.id },
         error,
@@ -195,7 +169,11 @@ export class WebSocketProvider implements TelephonyProvider {
     });
 
     this.ws.on("close", () => {
-      console.log(`WebSocket connection closed for call ${this.id}`);
+      console.log(
+        `[${this.id}] WebSocket connection closed, previous state:`,
+        this.ws?.readyState
+      );
+      this.ws = null;
       eventBus.emit("call.ended", {
         ctx: { callId: this.id },
         data: {
@@ -220,7 +198,6 @@ export class WebSocketProvider implements TelephonyProvider {
       } else {
         // Input is already Int16Array
         samples = input;
-        console.log(`Using provided Int16Array with ${samples.length} samples`);
       }
 
       let encodedData;
@@ -228,13 +205,7 @@ export class WebSocketProvider implements TelephonyProvider {
       // Use only the library implementation
       try {
         if (alawmulaw && alawmulaw.mulaw) {
-          console.log(
-            `Using alawmulaw library to encode ${samples.length} samples to μ-law`
-          );
           encodedData = alawmulaw.mulaw.encode(samples);
-          console.log(
-            `Successfully encoded to μ-law using library, result length: ${encodedData.length}`
-          );
         } else {
           throw new Error("alawmulaw library is required but not available");
         }
@@ -245,9 +216,7 @@ export class WebSocketProvider implements TelephonyProvider {
 
       // Return the raw μ-law data as Buffer for use with Deepgram
       const result = Buffer.from(encodedData.buffer);
-      console.log(
-        `Returning μ-law encoded buffer with size: ${result.length} bytes`
-      );
+
       return result;
     } catch (error) {
       console.error(`Error encoding to μ-Law: ${error}`);
@@ -268,13 +237,17 @@ export class WebSocketProvider implements TelephonyProvider {
   }
 
   public async send(audioData: string | Buffer): Promise<void> {
+    console.log(
+      `[${this.id}] Send called, WebSocket state:`,
+      this.ws?.readyState
+    );
     if (!this.ws) {
-      console.log(`WebSocket not connected for call ${this.id}`);
+      console.log(`[${this.id}] WebSocket not connected for call`);
       return;
     }
 
     try {
-      console.log(`Preparing to send audio data for call ${this.id}`);
+      console.log(`[${this.id}] Preparing to send audio data`);
 
       // Convert to string if buffer
       const dataToSend = Buffer.isBuffer(audioData)
@@ -328,12 +301,17 @@ export class WebSocketProvider implements TelephonyProvider {
   }
 
   public async cancel(): Promise<void> {
+    console.log(
+      `[${this.id}] Cancel called, WebSocket state:`,
+      this.ws?.readyState
+    );
     if (this.ws) {
       this.ws.send(
         JSON.stringify({
           event: "cancel",
         })
       );
+      console.log(`[${this.id}] Cancel event sent successfully`);
     }
   }
 
@@ -342,6 +320,7 @@ export class WebSocketProvider implements TelephonyProvider {
   }
 
   public async hangup(): Promise<void> {
+    console.log("hangup");
     if (this.ws) {
       this.ws.send(
         JSON.stringify({
