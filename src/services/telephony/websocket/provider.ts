@@ -301,17 +301,12 @@ export class WebSocketProvider implements TelephonyProvider {
   }
 
   public async cancel(): Promise<void> {
-    console.log(
-      `[${this.id}] Cancel called, WebSocket state:`,
-      this.ws?.readyState
-    );
     if (this.ws) {
       this.ws.send(
         JSON.stringify({
           event: "cancel",
         })
       );
-      console.log(`[${this.id}] Cancel event sent successfully`);
     }
   }
 
