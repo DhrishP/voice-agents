@@ -237,19 +237,12 @@ export class WebSocketProvider implements TelephonyProvider {
   }
 
   public async send(audioData: string | Buffer): Promise<void> {
-    console.log(
-      `[${this.id}] Send called, WebSocket state:`,
-      this.ws?.readyState
-    );
     if (!this.ws) {
       console.log(`[${this.id}] WebSocket not connected for call`);
       return;
     }
-
     try {
-      console.log(`[${this.id}] Preparing to send audio data`);
 
-      // Convert to string if buffer
       const dataToSend = Buffer.isBuffer(audioData)
         ? audioData.toString("base64")
         : audioData;

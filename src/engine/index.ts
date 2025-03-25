@@ -100,10 +100,17 @@ class PhoneCall {
       this.telephonyEngine = phoneCall;
       telephonyEngines[this.id] = phoneCall;
     } else if (this.payload.telephonyProvider === "websocket") {
-      const callId = await websocketOperator.createSession(this.id);
-      const provider = await websocketOperator.getPhoneCall(callId);
-      this.telephonyEngine = provider;
-      telephonyEngines[this.id] = provider;
+      try {
+        const provider = await websocketOperator.getPhoneCall(this.id);
+        this.telephonyEngine = provider;
+        telephonyEngines[this.id] = provider;
+      } catch (error) {
+        console.error(
+          `Failed to get WebSocket provider for call ${this.id}:`,
+          error
+        );
+        throw error;
+      }
     } else {
       throw new Error("Invalid telephony provider");
     }
@@ -192,12 +199,15 @@ eventBus.on("call.initiated", async (event) => {
   const { ctx, payload } = event;
   const engine = new PhoneCall(ctx.callId, payload);
 
-  const existingCall = await prisma.call.findUnique({
-    where: { id: ctx.callId },
-  });
+  // For WebSocket calls, we've already created the record in the /session endpoint
+  if (payload.telephonyProvider !== "websocket") {
+    const existingCall = await prisma.call.findUnique({
+      where: { id: ctx.callId },
+    });
 
-  if (!existingCall) {
-    await engine.initializeCallRecord();
+    if (!existingCall) {
+      await engine.initializeCallRecord();
+    }
   }
 
   await engine.initialize();
@@ -476,26 +486,17 @@ eventBus.on("websocket.ready", async (event) => {
   const { ctx } = event;
   console.log(`📱 WebSocket connection ready for call ${ctx.callId}`);
 
-  // Check if engines are initialized for this call
   const sttEngine = sttEngines[ctx.callId];
   const llmEngine = llmEngines[ctx.callId];
   const ttsEngine = ttsEngines[ctx.callId];
   const telephonyEngine = telephonyEngines[ctx.callId];
 
-  console.log(`📊 Engines status for call ${ctx.callId}:`);
+  console.log(`📊 Current engine status for call ${ctx.callId}:`);
+  console.log(`STT Engine: ${sttEngine ? "✅ Ready" : "❌ Not Ready"}`);
+  console.log(`LLM Engine: ${llmEngine ? "✅ Ready" : "❌ Not Ready"}`);
+  console.log(`TTS Engine: ${ttsEngine ? "✅ Ready" : "❌ Not Ready"}`);
   console.log(
-    `STT Engine: ${sttEngine ? "✅ Initialized" : "❌ Not initialized"}`
-  );
-  console.log(
-    `LLM Engine: ${llmEngine ? "✅ Initialized" : "❌ Not initialized"}`
-  );
-  console.log(
-    `TTS Engine: ${ttsEngine ? "✅ Initialized" : "❌ Not initialized"}`
-  );
-  console.log(
-    `Telephony Engine: ${
-      telephonyEngine ? "✅ Initialized" : "❌ Not initialized"
-    }`
+    `Telephony Engine: ${telephonyEngine ? "✅ Ready" : "❌ Not Ready"}`
   );
 });
 
