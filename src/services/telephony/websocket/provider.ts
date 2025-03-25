@@ -3,11 +3,22 @@ import { TelephonyProvider } from "../../../types/providers/telephony";
 import eventBus from "../../../engine";
 import { VoiceCallJobData } from "../../../types/voice-call";
 const alawmulaw = require("alawmulaw");
+
+interface AudioChunk {
+  data: Buffer;
+  timestamp: number;
+  id: number;
+}
+
 export class WebSocketProvider implements TelephonyProvider {
   private ws: WebSocket | null = null;
   private id: string;
   private callUuid: string | null = null;
   private listenerCallback: ((chunk: string) => void) | null = null;
+  private audioChunks: AudioChunk[] = [];
+  private isProcessing: boolean = false;
+  private nextChunkId: number = 0;
+  private chunkTimeout: NodeJS.Timeout | null = null;
 
   constructor(id: string) {
     this.id = id;
@@ -236,56 +247,124 @@ export class WebSocketProvider implements TelephonyProvider {
     }
   }
 
+  private async processAudioChunks(): Promise<void> {
+    if (this.isProcessing || this.audioChunks.length === 0) return;
+
+    this.isProcessing = true;
+
+    try {
+      // Sort chunks by ID to ensure correct sequence
+      this.audioChunks.sort((a, b) => a.id - b.id);
+
+      // Combine all PCM data
+      let combinedPcmData: Int16Array[] = [];
+
+      for (const chunk of this.audioChunks) {
+        // Convert µ-law to PCM for each chunk
+        const pcmData = alawmulaw.mulaw.decode(new Uint8Array(chunk.data));
+        combinedPcmData.push(new Int16Array(pcmData.buffer));
+      }
+
+      // Calculate total length
+      const totalLength = combinedPcmData.reduce(
+        (acc, arr) => acc + arr.length,
+        0
+      );
+
+      // Create combined buffer
+      const combinedBuffer = new Int16Array(totalLength);
+      let offset = 0;
+
+      // Copy data
+      for (const pcmChunk of combinedPcmData) {
+        combinedBuffer.set(pcmChunk, offset);
+        offset += pcmChunk.length;
+      }
+
+      // Create WAV header
+      const wavHeader = this.createWavHeader(
+        combinedBuffer.length * 2,
+        8000,
+        1,
+        16
+      );
+
+      // Combine header and PCM data
+      const wavBuffer = Buffer.concat([
+        wavHeader,
+        Buffer.from(combinedBuffer.buffer),
+      ]);
+
+      // Send combined audio
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(
+          JSON.stringify({
+            event: "audio.out",
+            data: wavBuffer.toString("base64"),
+            format: "wav",
+            sampleRate: 8000,
+            timestamp: Date.now(),
+          })
+        );
+
+        console.log(
+          `[${this.id}] Sent combined audio of ${this.audioChunks.length} chunks, total size: ${wavBuffer.length} bytes`
+        );
+      }
+
+      // Clear the chunks
+      this.audioChunks = [];
+    } catch (error) {
+      console.error(`[${this.id}] Error processing audio chunks:`, error);
+    } finally {
+      this.isProcessing = false;
+      if (this.chunkTimeout) {
+        clearTimeout(this.chunkTimeout);
+        this.chunkTimeout = null;
+      }
+    }
+  }
+
   public async send(audioData: string | Buffer): Promise<void> {
     if (!this.ws) {
       console.log(`[${this.id}] WebSocket not connected for call`);
       return;
     }
+
     try {
-
-      const dataToSend = Buffer.isBuffer(audioData)
-        ? audioData.toString("base64")
-        : audioData;
-
-      if (
-        typeof dataToSend === "string" &&
-        !/^[A-Za-z0-9+/]*={0,2}$/.test(dataToSend)
-      ) {
-        throw new Error("Invalid base64 data received");
-      }
-
-      const audioBuffer = Buffer.isBuffer(audioData)
+      const dataBuffer = Buffer.isBuffer(audioData)
         ? audioData
         : Buffer.from(audioData, "base64");
 
+      // Add chunk to queue
+      this.audioChunks.push({
+        data: dataBuffer,
+        timestamp: Date.now(),
+        id: this.nextChunkId++,
+      });
+
       console.log(
-        `Sending audio data of size ${audioBuffer.length} bytes for call ${this.id}`
+        `[${this.id}] Added audio chunk ${this.nextChunkId - 1}. Queue size: ${
+          this.audioChunks.length
+        }`
       );
 
-      if (this.ws.readyState === WebSocket.OPEN) {
-        this.ws.send(
-          JSON.stringify({
-            event: "audio.out",
-            data: dataToSend,
-            format: "audio/x-mulaw",
-            sampleRate: 8000,
-            timestamp: Date.now(),
-          })
-        );
-        console.log(`Audio data sent successfully for call ${this.id}`);
-      } else {
-        console.error(
-          `WebSocket not in OPEN state for call ${this.id}, current state: ${this.ws.readyState}`
-        );
+      // Clear any existing timeout
+      if (this.chunkTimeout) {
+        clearTimeout(this.chunkTimeout);
       }
-    } catch (error: any) {
-      console.error(`Error sending audio for call ${this.id}:`, error);
 
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      // Set a timeout to process chunks (wait for more chunks for 100ms)
+      this.chunkTimeout = setTimeout(() => {
+        this.processAudioChunks();
+      }, 100);
+    } catch (error: any) {
+      console.error(`[${this.id}] Error queueing audio:`, error);
+      if (this.ws?.readyState === WebSocket.OPEN) {
         this.ws.send(
           JSON.stringify({
             event: "error",
-            message: error.message || "Failed to send audio",
+            message: error.message || "Failed to queue audio",
             timestamp: Date.now(),
           })
         );
@@ -293,13 +372,64 @@ export class WebSocketProvider implements TelephonyProvider {
     }
   }
 
+  private createWavHeader(
+    dataLength: number,
+    sampleRate: number,
+    numChannels: number,
+    bitsPerSample: number
+  ): Buffer {
+    const buffer = Buffer.alloc(44);
+
+    // RIFF chunk descriptor
+    buffer.write("RIFF", 0);
+    buffer.writeUInt32LE(36 + dataLength, 4);
+    buffer.write("WAVE", 8);
+
+    // fmt sub-chunk
+    buffer.write("fmt ", 12);
+    buffer.writeUInt32LE(16, 16); // fmt chunk size
+    buffer.writeUInt16LE(1, 20); // audio format (PCM)
+    buffer.writeUInt16LE(numChannels, 22);
+    buffer.writeUInt32LE(sampleRate, 24);
+    buffer.writeUInt32LE((sampleRate * numChannels * bitsPerSample) / 8, 28); // byte rate
+    buffer.writeUInt16LE((numChannels * bitsPerSample) / 8, 32); // block align
+    buffer.writeUInt16LE(bitsPerSample, 34);
+
+    // data sub-chunk
+    buffer.write("data", 36);
+    buffer.writeUInt32LE(dataLength, 40);
+
+    return buffer;
+  }
+
   public async cancel(): Promise<void> {
     if (this.ws) {
+      // Clear any pending chunks and timeout
+      this.audioChunks = [];
+      if (this.chunkTimeout) {
+        clearTimeout(this.chunkTimeout);
+        this.chunkTimeout = null;
+      }
+      this.isProcessing = false;
+
+      // Emit cancel event
+      eventBus.emit("call.audio.cancelled", {
+        ctx: {
+          callId: this.id,
+          provider: "websocket",
+          timestamp: Date.now(),
+        },
+      });
+
+      // Send cancel event to client
       this.ws.send(
         JSON.stringify({
           event: "cancel",
+          timestamp: Date.now(),
         })
       );
+
+      console.log(`[${this.id}] Audio queue cleared and playback cancelled`);
     }
   }
 
