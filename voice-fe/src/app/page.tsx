@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import useInducedCall from "@/hooks/useInducedCall";
 import React from "react";
 import UseWindow from "@/hooks/usewindow";
+const alawmulaw = require("alawmulaw");
 
 export default function HomePage() {
   const [callId, setCallId] = useState<string | null>(null);
@@ -177,14 +178,25 @@ export default function HomePage() {
             return;
           }
 
-          // Try to play the audio
           try {
-            // Convert base64 to ArrayBuffer
-            const audioData = Buffer.from(base64Data, "base64");
-            const arrayBuffer = audioData.buffer;
+            // Convert base64 to μ-law buffer
+            const mulawData = Buffer.from(base64Data, "base64");
 
-            // Decode the audio data
-            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+            // Decode μ-law to PCM
+            const pcmData = alawmulaw.mulaw.decode(new Uint8Array(mulawData));
+
+            // Create audio buffer
+            const audioBuffer = audioContext.createBuffer(
+              1,
+              pcmData.length,
+              8000
+            );
+            const channelData = audioBuffer.getChannelData(0);
+
+            // Convert Int16Array to Float32Array
+            for (let i = 0; i < pcmData.length; i++) {
+              channelData[i] = pcmData[i] / 32768.0; // Convert from Int16 to Float32
+            }
 
             // Play the audio
             const source = audioContext.createBufferSource();
