@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import useInducedCall from "@/hooks/useInducedCall";
+import useInducedCall, { EventType } from "@/hooks/useInducedCall";
 import React from "react";
 import UseWindow from "@/hooks/usewindow";
-const alawmulaw = require("alawmulaw");
 
 export default function HomePage() {
   const [callId, setCallId] = useState<string | null>(null);
@@ -33,15 +32,20 @@ export default function HomePage() {
       },
     });
 
-  // Initialize audio context
+  // Initialize audio context once
   useEffect(() => {
-    if (!audioContextRef.current) {
-      if (!window) return;
-      audioContextRef.current = new (window?.AudioContext ||
-        (window as any).webkitAudioContext)({
-        sampleRate: 8000,
-      });
-      addDebugMessage("Audio context initialized at 8kHz");
+    const win = typeof window !== "undefined" ? window : null;
+    if (win && !audioContextRef.current) {
+      try {
+        const AudioContext =
+          win.AudioContext || (win as any).webkitAudioContext;
+        audioContextRef.current = new AudioContext({
+          sampleRate: 8000,
+        });
+        addDebugMessage("Audio context initialized at 8kHz");
+      } catch (error) {
+        addDebugMessage(`Failed to initialize audio context: ${error}`);
+      }
     }
     return () => {
       if (audioContextRef.current) {
@@ -51,35 +55,56 @@ export default function HomePage() {
     };
   }, []);
 
+  // Set up audio output event listener for simple audio playback
+  useEffect(() => {
+    if (callActive && events) {
+      addDebugMessage("Setting up audio output handler");
+
+      const handleAudioChunk = async (audioData: string) => {
+        if (!audioContextRef.current) {
+          addDebugMessage("No audio context available");
+          return;
+        }
+
+        try {
+          // Resume AudioContext if it's suspended
+          if (audioContextRef.current.state === "suspended") {
+            await audioContextRef.current.resume();
+          }
+
+          // Convert base64 to array buffer and play
+          const audioArrayBuffer = Buffer.from(audioData, "base64").buffer;
+          const audioBuffer = await audioContextRef.current.decodeAudioData(
+            audioArrayBuffer
+          );
+          const source = audioContextRef.current.createBufferSource();
+          source.buffer = audioBuffer;
+          source.connect(audioContextRef.current.destination);
+          source.start(0);
+          source.onended = () => source.disconnect();
+        } catch (error) {
+          console.error("Error playing audio:", error);
+          addDebugMessage(
+            `Error playing audio: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        }
+      };
+
+      // Set up event listeners
+      const unsubscribeAudio = events.on("audio.out", handleAudioChunk);
+      return () => {
+        unsubscribeAudio();
+      };
+    }
+  }, [callActive, events, addDebugMessage]);
+
   // Start recording
   const startRecording = async () => {
     if (!callActive) {
       addDebugMessage("Cannot start recording - call not active");
       return;
-    }
-
-    // Ensure audio context is initialized
-    if (!audioContextRef.current) {
-      if (!window) {
-        addDebugMessage("Window is not available");
-        return;
-      }
-      try {
-        audioContextRef.current = new (window.AudioContext ||
-          (window as any).webkitAudioContext)({
-          sampleRate: 8000,
-        });
-        addDebugMessage("Audio context initialized at 8kHz");
-      } catch (error) {
-        addDebugMessage(`Failed to initialize audio context: ${error}`);
-        return;
-      }
-    }
-
-    // Resume audio context if it's in suspended state
-    if (audioContextRef.current.state === "suspended") {
-      await audioContextRef.current.resume();
-      addDebugMessage("Audio context resumed");
     }
 
     try {
@@ -93,11 +118,15 @@ export default function HomePage() {
       });
 
       mediaStreamRef.current = stream;
-      const audioContext = audioContextRef.current;
-
-      if (!audioContext) {
-        throw new Error("Audio context is not available");
+      const win = typeof window !== "undefined" ? window : null;
+      if (!win) {
+        throw new Error("Window is not available");
       }
+
+      const audioContext = new (win.AudioContext ||
+        (win as any).webkitAudioContext)({
+        sampleRate: 8000,
+      });
 
       // Create source from microphone
       const source = audioContext.createMediaStreamSource(stream);
@@ -109,25 +138,14 @@ export default function HomePage() {
       // Handle audio processing
       processor.onaudioprocess = (e) => {
         const inputData = e.inputBuffer.getChannelData(0);
-
-        // Convert Float32Array to Int16Array
         const samples = new Int16Array(inputData.length);
         for (let i = 0; i < inputData.length; i++) {
-          // Convert float to 16-bit PCM
           const s = Math.max(-1, Math.min(1, inputData[i]));
           samples[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
         }
-
-        // Convert to base64
         const base64data = Buffer.from(samples.buffer).toString("base64");
-
-        // Send to backend
         pipe(base64data);
-
         audioChunksRef.current++;
-        addDebugMessage(
-          `Processed audio chunk ${audioChunksRef.current}: ${samples.length} samples`
-        );
       };
 
       // Connect the audio nodes
@@ -135,7 +153,7 @@ export default function HomePage() {
       processor.connect(audioContext.destination);
 
       setIsRecording(true);
-      addDebugMessage("Recording started with Web Audio API");
+      addDebugMessage("Recording started");
     } catch (error) {
       console.error("Error starting recording:", error);
       addDebugMessage(`Failed to start recording: ${error}`);
@@ -157,163 +175,6 @@ export default function HomePage() {
     setIsRecording(false);
     addDebugMessage("Recording stopped");
   };
-
-  // Set up audio output event listener for simple audio playback
-  useEffect(() => {
-    if (callActive && events && audioContextRef.current) {
-      addDebugMessage("Setting up audio output handler");
-
-      const playNextChunk = async () => {
-        if (!audioQueueRef.current.length || !audioContextRef.current) {
-          isPlayingRef.current = false;
-          addDebugMessage(
-            "Queue empty or no audio context - stopping playback"
-          );
-          return;
-        }
-
-        isPlayingRef.current = true;
-        const base64Data = audioQueueRef.current.shift();
-        if (!base64Data) return;
-
-        const audioContext = audioContextRef.current;
-
-        // Ensure context is running
-        if (audioContext.state === "suspended") {
-          addDebugMessage("Resuming suspended audio context");
-          await audioContext.resume();
-        }
-
-        try {
-          // Convert base64 to μ-law buffer
-          const mulawData = Buffer.from(base64Data, "base64");
-          addDebugMessage(
-            `Processing μ-law data, length: ${mulawData.length} bytes`
-          );
-
-          // Decode μ-law to PCM
-          const pcmData = alawmulaw.mulaw.decode(new Uint8Array(mulawData));
-          addDebugMessage(
-            `Decoded PCM data, length: ${pcmData.length} samples`
-          );
-
-          // Create audio buffer
-          const audioBuffer = audioContext.createBuffer(
-            1,
-            pcmData.length,
-            8000
-          );
-          const channelData = audioBuffer.getChannelData(0);
-
-          // Convert Int16Array to Float32Array with amplification
-          const amplification = 4.0; // Increased amplification
-          for (let i = 0; i < pcmData.length; i++) {
-            channelData[i] = (pcmData[i] / 32768.0) * amplification;
-          }
-
-          // Create and configure audio source
-          const source = audioContext.createBufferSource();
-          const gainNode = audioContext.createGain();
-          gainNode.gain.value = 1.0;
-
-          // Connect the audio nodes
-          source.buffer = audioBuffer;
-          source.connect(gainNode);
-          gainNode.connect(audioContext.destination);
-
-          // When this chunk ends, play the next one
-          source.onended = () => {
-            addDebugMessage("Chunk playback ended, playing next chunk");
-            playNextChunk();
-          };
-
-          // Start playback
-          source.start(0); // Explicitly start at 0
-          audioChunksRef.current++;
-          addDebugMessage(
-            `Started playing chunk #${
-              audioChunksRef.current
-            }, duration: ${audioBuffer.duration.toFixed(3)}s`
-          );
-        } catch (error) {
-          console.error("Error playing audio chunk:", error);
-          addDebugMessage(
-            `Error playing chunk: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
-          // Try to continue with next chunk even if this one failed
-          setTimeout(() => playNextChunk(), 100); // Add small delay before trying next chunk
-        }
-      };
-
-      const handleAudioChunk = async (base64Data: string) => {
-        console.log("Received audio chunk:", base64Data.slice(0, 50) + "..."); // Log the start of the chunk
-
-        const audioContext = audioContextRef.current;
-        if (!audioContext) {
-          addDebugMessage("No audio context available for incoming chunk");
-          return;
-        }
-
-        try {
-          // Quick validation of base64 data
-          if (!base64Data || base64Data.length < 10) {
-            addDebugMessage("Received invalid or empty audio chunk");
-            return;
-          }
-
-          // Log the audio context state
-          console.log("AudioContext state:", audioContext.state);
-          addDebugMessage(`AudioContext state: ${audioContext.state}`);
-
-          // Resume AudioContext if it's suspended
-          if (audioContext.state === "suspended") {
-            await audioContext.resume();
-            addDebugMessage("Resumed suspended audio context");
-          }
-
-          // Convert base64 to μ-law buffer for validation
-          const mulawData = Buffer.from(base64Data, "base64");
-          console.log(
-            "μ-law data length:",
-            mulawData.length,
-            "first few bytes:",
-            Array.from(mulawData.slice(0, 5))
-          );
-
-          // Add the chunk to the queue
-          audioQueueRef.current.push(base64Data);
-          addDebugMessage(
-            `Added chunk to queue. Queue length: ${audioQueueRef.current.length}`
-          );
-
-          // If nothing is playing, start playing
-          if (!isPlayingRef.current) {
-            addDebugMessage("Starting playback of queued chunks");
-            playNextChunk();
-          }
-        } catch (error) {
-          console.error("Error handling audio chunk:", error);
-          addDebugMessage(
-            `Error handling chunk: ${
-              error instanceof Error ? error.message : String(error)
-            }`
-          );
-        }
-      };
-
-      const unsubscribe = events.on("audio.out", handleAudioChunk);
-
-      // Clean up function
-      return () => {
-        unsubscribe();
-        audioQueueRef.current = []; // Clear the queue
-        isPlayingRef.current = false;
-        addDebugMessage("Audio output handler removed and state cleared");
-      };
-    }
-  }, [callActive, events, addDebugMessage]);
 
   const createCall = useCallback(async () => {
     try {
@@ -350,30 +211,41 @@ export default function HomePage() {
   }, [addDebugMessage]);
 
   const playTestTone = async () => {
-    if (!audioContextRef.current) {
-      addDebugMessage("No audio context for test tone");
-      return;
-    }
-
-    const audioContext = audioContextRef.current;
-
     try {
+      const win = typeof window !== "undefined" ? window : null;
+      if (!audioContextRef.current && win) {
+        const AudioContext =
+          win.AudioContext || (win as any).webkitAudioContext;
+        audioContextRef.current = new AudioContext({
+          sampleRate: 8000,
+        });
+        addDebugMessage("Audio context initialized for test tone");
+      }
+
+      if (!audioContextRef.current) {
+        addDebugMessage("Could not initialize audio context");
+        return;
+      }
+
       // Resume context if suspended
-      if (audioContext.state === "suspended") {
-        await audioContext.resume();
+      if (audioContextRef.current.state === "suspended") {
+        await audioContextRef.current.resume();
         addDebugMessage("Resumed audio context for test tone");
       }
 
       // Create an oscillator
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
+      const oscillator = audioContextRef.current.createOscillator();
+      const gainNode = audioContextRef.current.createGain();
 
       oscillator.type = "sine";
-      oscillator.frequency.setValueAtTime(440, audioContext.currentTime); // 440 Hz
-      gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+      oscillator.frequency.setValueAtTime(
+        440,
+        audioContextRef.current.currentTime
+      ); // 440 Hz
+      gainNode.gain.setValueAtTime(0.5, audioContextRef.current.currentTime);
 
       oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
+      gainNode.connect(audioContextRef.current.destination);
 
       oscillator.start();
       addDebugMessage("Test tone started");
@@ -381,6 +253,8 @@ export default function HomePage() {
       // Stop after 1 second
       setTimeout(() => {
         oscillator.stop();
+        oscillator.disconnect();
+        gainNode.disconnect();
         addDebugMessage("Test tone stopped");
       }, 1000);
     } catch (error) {

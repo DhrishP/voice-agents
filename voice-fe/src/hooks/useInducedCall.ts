@@ -1,6 +1,11 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 
-export type EventType = "audio.out" | "call.started" | "call.ended" | "error";
+export type EventType =
+  | "audio.out"
+  | "call.started"
+  | "call.ended"
+  | "error"
+  | "call.audio.cancelled";
 
 export interface UseInducedCallOptions {
   onError?: (error: Error) => void;
@@ -136,6 +141,13 @@ export function useInducedCall(
           } else if (message.event === "call.ended") {
             handleCallEnd();
             const listeners = eventListeners.current.get("call.ended");
+            if (listeners) {
+              listeners.forEach((listener) => listener({}));
+            }
+          } else if (message.event === "cancel") {
+            const listeners = eventListeners.current.get(
+              "call.audio.cancelled"
+            );
             if (listeners) {
               listeners.forEach((listener) => listener({}));
             }
