@@ -24,7 +24,6 @@ export function useInducedCall(
     new Map()
   );
 
-  // Handle call end cleanup
   const handleCallEnd = useCallback(() => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -44,12 +43,10 @@ export function useInducedCall(
     isConnectingRef.current = false;
   }, []);
 
-  // Initialize WebSocket connection
   useEffect(() => {
     if (!callId) return;
 
     const connectToWebSocket = () => {
-      // Prevent multiple connection attempts
       if (
         isConnectingRef.current ||
         webSocketRef.current?.readyState === WebSocket.OPEN
@@ -64,7 +61,6 @@ export function useInducedCall(
       }/stream/${callId}`;
       console.log("Connecting to WebSocket:", wsUrl);
 
-      // Clean up any existing connection
       if (webSocketRef.current) {
         try {
           webSocketRef.current.close();
@@ -82,7 +78,6 @@ export function useInducedCall(
         isConnectingRef.current = false;
         webSocketRef.current = ws;
 
-        // Start tracking call duration
         if (!hasStartedRef.current) {
           hasStartedRef.current = true;
           startTimeRef.current = Date.now();
@@ -108,20 +103,17 @@ export function useInducedCall(
           console.log("Received message:", message);
 
           if (message.event === "audio.out") {
-            // Enhanced logging for audio output events
             console.log(
               `Received audio.out event, data length: ${
                 message.data ? message.data.length : "undefined"
               }`
             );
 
-            // Verify the data exists and is properly formatted
             if (!message.data) {
               console.error("Audio.out event missing data payload");
               return;
             }
 
-            // Handle audio output event
             const listeners = eventListeners.current.get("audio.out");
             if (listeners) {
               listeners.forEach((listener) => listener(message.data));
@@ -129,7 +121,6 @@ export function useInducedCall(
               console.warn("No listeners registered for audio.out events");
             }
           } else if (message.event === "call.ended") {
-            // Handle call ended event
             handleCallEnd();
             const listeners = eventListeners.current.get("call.ended");
             if (listeners) {
@@ -137,7 +128,6 @@ export function useInducedCall(
             }
           }
 
-          // If the message contains a transcript update, add it
           if (message.transcription) {
             setTranscript((prev) => [...prev, message.transcription]);
           }
@@ -165,16 +155,8 @@ export function useInducedCall(
         );
         isConnectingRef.current = false;
         webSocketRef.current = null;
-
-        // Don't try to reconnect if we're intentionally closing
-        if (hasStartedRef.current && event.code !== 1000) {
-          // Attempt to reconnect after a delay if the close wasn't intentional
-          console.log("Attempting to reconnect in 3 seconds...");
-          setTimeout(connectToWebSocket, 3000);
-        } else {
-          handleCallEnd();
-          hasStartedRef.current = false;
-        }
+        handleCallEnd();
+        hasStartedRef.current = false;
       };
     };
 
@@ -190,7 +172,6 @@ export function useInducedCall(
     };
   }, [callId]);
 
-  // Function to register event listeners
   const on = useCallback((event: EventType, callback: (data: any) => void) => {
     if (!eventListeners.current.has(event)) {
       eventListeners.current.set(event, new Set());
@@ -199,16 +180,13 @@ export function useInducedCall(
     const listeners = eventListeners.current.get(event)!;
     listeners.add(callback);
 
-    // Return unsubscribe function
     return () => {
       listeners.delete(callback);
     };
   }, []);
 
-  // Memoize the events object to keep its reference stable
   const events = useMemo(() => ({ on }), [on]);
 
-  // Function to hangup the call
   const hangup = useCallback(() => {
     if (
       webSocketRef.current &&
@@ -223,7 +201,6 @@ export function useInducedCall(
     }
   }, [handleCallEnd]);
 
-  // Function to send audio data
   const pipe = useCallback(
     (data: string) => {
       if (!webSocketRef.current) {
@@ -239,7 +216,6 @@ export function useInducedCall(
       }
 
       try {
-        // Check if data is in JSON format (not needed for audio)
         if (data.startsWith("{")) {
           try {
             const parsedData = JSON.parse(data);
@@ -259,29 +235,25 @@ export function useInducedCall(
           }
         }
 
-        // Audio data handling
         console.log(`Sending audio data of length ${data.length} bytes`);
 
-        // Validate data is not empty
         if (!data || data.length === 0) {
           console.warn("Empty audio data received, not sending");
           return false;
         }
 
-        // Validate base64 format
         if (!/^[A-Za-z0-9+/]*={0,2}$/.test(data)) {
           console.error("Invalid base64 data received, not sending");
           return false;
         }
 
-        // Send audio data to the backend for Deepgram processing
         webSocketRef.current.send(
           JSON.stringify({
             event: "audio",
             data: data,
-            format: "audio/l16", // Raw PCM format
-            sampleRate: 8000, // Use telephony standard sample rate
-            channels: 1, // Mono audio
+            format: "audio/l16",
+            sampleRate: 8000,
+            channels: 1,
             chunk: true,
             timestamp: Date.now(),
           })
