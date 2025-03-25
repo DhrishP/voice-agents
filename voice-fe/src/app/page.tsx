@@ -16,6 +16,8 @@ export default function HomePage() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const audioQueueRef = useRef<string[]>([]);
+  const isPlayingRef = useRef<boolean>(false);
   const window = UseWindow();
   const addDebugMessage = useCallback((message: string) => {
     setDebugInfo((prev) => [message, ...prev].slice(0, 20));
@@ -161,62 +163,154 @@ export default function HomePage() {
     if (callActive && events && audioContextRef.current) {
       addDebugMessage("Setting up audio output handler");
 
-      const playAudioChunk = async (base64Data: string) => {
+      const playNextChunk = async () => {
+        if (!audioQueueRef.current.length || !audioContextRef.current) {
+          isPlayingRef.current = false;
+          addDebugMessage(
+            "Queue empty or no audio context - stopping playback"
+          );
+          return;
+        }
+
+        isPlayingRef.current = true;
+        const base64Data = audioQueueRef.current.shift();
+        if (!base64Data) return;
+
+        const audioContext = audioContextRef.current;
+
+        // Ensure context is running
+        if (audioContext.state === "suspended") {
+          addDebugMessage("Resuming suspended audio context");
+          await audioContext.resume();
+        }
+
         try {
-          addDebugMessage(`Received audio chunk, length: ${base64Data.length}`);
+          // Convert base64 to μ-law buffer
+          const mulawData = Buffer.from(base64Data, "base64");
+          addDebugMessage(
+            `Processing μ-law data, length: ${mulawData.length} bytes`
+          );
 
-          // Skip processing if data is too short
-          if (base64Data.length < 10) {
-            addDebugMessage("Audio data too short, skipping");
-            return;
+          // Decode μ-law to PCM
+          const pcmData = alawmulaw.mulaw.decode(new Uint8Array(mulawData));
+          addDebugMessage(
+            `Decoded PCM data, length: ${pcmData.length} samples`
+          );
+
+          // Create audio buffer
+          const audioBuffer = audioContext.createBuffer(
+            1,
+            pcmData.length,
+            8000
+          );
+          const channelData = audioBuffer.getChannelData(0);
+
+          // Convert Int16Array to Float32Array with amplification
+          const amplification = 4.0; // Increased amplification
+          for (let i = 0; i < pcmData.length; i++) {
+            channelData[i] = (pcmData[i] / 32768.0) * amplification;
           }
 
-          // Get the audio context
-          const audioContext = audioContextRef.current;
-          if (!audioContext) {
-            addDebugMessage("Audio context not available");
-            return;
-          }
+          // Create and configure audio source
+          const source = audioContext.createBufferSource();
+          const gainNode = audioContext.createGain();
+          gainNode.gain.value = 1.0;
 
-          try {
-            // Convert base64 to μ-law buffer
-            const mulawData = Buffer.from(base64Data, "base64");
+          // Connect the audio nodes
+          source.buffer = audioBuffer;
+          source.connect(gainNode);
+          gainNode.connect(audioContext.destination);
 
-            // Decode μ-law to PCM
-            const pcmData = alawmulaw.mulaw.decode(new Uint8Array(mulawData));
+          // When this chunk ends, play the next one
+          source.onended = () => {
+            addDebugMessage("Chunk playback ended, playing next chunk");
+            playNextChunk();
+          };
 
-            // Create audio buffer
-            const audioBuffer = audioContext.createBuffer(
-              1,
-              pcmData.length,
-              8000
-            );
-            const channelData = audioBuffer.getChannelData(0);
-
-            // Convert Int16Array to Float32Array
-            for (let i = 0; i < pcmData.length; i++) {
-              channelData[i] = pcmData[i] / 32768.0; // Convert from Int16 to Float32
-            }
-
-            // Play the audio
-            const source = audioContext.createBufferSource();
-            source.buffer = audioBuffer;
-            source.connect(audioContext.destination);
-            source.start();
-            addDebugMessage("Audio playback started");
-          } catch (decodeError) {
-            addDebugMessage(`Failed to decode audio: ${decodeError}`);
-          }
+          // Start playback
+          source.start(0); // Explicitly start at 0
+          audioChunksRef.current++;
+          addDebugMessage(
+            `Started playing chunk #${
+              audioChunksRef.current
+            }, duration: ${audioBuffer.duration.toFixed(3)}s`
+          );
         } catch (error) {
-          console.error("Error playing audio:", error);
-          addDebugMessage(`Error playing audio: ${error}`);
+          console.error("Error playing audio chunk:", error);
+          addDebugMessage(
+            `Error playing chunk: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+          // Try to continue with next chunk even if this one failed
+          setTimeout(() => playNextChunk(), 100); // Add small delay before trying next chunk
         }
       };
 
-      const unsubscribe = events.on("audio.out", playAudioChunk);
+      const handleAudioChunk = async (base64Data: string) => {
+        console.log("Received audio chunk:", base64Data.slice(0, 50) + "..."); // Log the start of the chunk
+
+        const audioContext = audioContextRef.current;
+        if (!audioContext) {
+          addDebugMessage("No audio context available for incoming chunk");
+          return;
+        }
+
+        try {
+          // Quick validation of base64 data
+          if (!base64Data || base64Data.length < 10) {
+            addDebugMessage("Received invalid or empty audio chunk");
+            return;
+          }
+
+          // Log the audio context state
+          console.log("AudioContext state:", audioContext.state);
+          addDebugMessage(`AudioContext state: ${audioContext.state}`);
+
+          // Resume AudioContext if it's suspended
+          if (audioContext.state === "suspended") {
+            await audioContext.resume();
+            addDebugMessage("Resumed suspended audio context");
+          }
+
+          // Convert base64 to μ-law buffer for validation
+          const mulawData = Buffer.from(base64Data, "base64");
+          console.log(
+            "μ-law data length:",
+            mulawData.length,
+            "first few bytes:",
+            Array.from(mulawData.slice(0, 5))
+          );
+
+          // Add the chunk to the queue
+          audioQueueRef.current.push(base64Data);
+          addDebugMessage(
+            `Added chunk to queue. Queue length: ${audioQueueRef.current.length}`
+          );
+
+          // If nothing is playing, start playing
+          if (!isPlayingRef.current) {
+            addDebugMessage("Starting playback of queued chunks");
+            playNextChunk();
+          }
+        } catch (error) {
+          console.error("Error handling audio chunk:", error);
+          addDebugMessage(
+            `Error handling chunk: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+        }
+      };
+
+      const unsubscribe = events.on("audio.out", handleAudioChunk);
+
+      // Clean up function
       return () => {
         unsubscribe();
-        addDebugMessage("Audio output handler removed");
+        audioQueueRef.current = []; // Clear the queue
+        isPlayingRef.current = false;
+        addDebugMessage("Audio output handler removed and state cleared");
       };
     }
   }, [callActive, events, addDebugMessage]);
@@ -255,6 +349,50 @@ export default function HomePage() {
     }
   }, [addDebugMessage]);
 
+  const playTestTone = async () => {
+    if (!audioContextRef.current) {
+      addDebugMessage("No audio context for test tone");
+      return;
+    }
+
+    const audioContext = audioContextRef.current;
+
+    try {
+      // Resume context if suspended
+      if (audioContext.state === "suspended") {
+        await audioContext.resume();
+        addDebugMessage("Resumed audio context for test tone");
+      }
+
+      // Create an oscillator
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(440, audioContext.currentTime); // 440 Hz
+      gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      oscillator.start();
+      addDebugMessage("Test tone started");
+
+      // Stop after 1 second
+      setTimeout(() => {
+        oscillator.stop();
+        addDebugMessage("Test tone stopped");
+      }, 1000);
+    } catch (error) {
+      console.error("Test tone error:", error);
+      addDebugMessage(
+        `Test tone error: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  };
+
   return (
     <main className="min-h-screen p-8">
       <div className="max-w-2xl mx-auto space-y-6">
@@ -267,13 +405,22 @@ export default function HomePage() {
         )}
 
         {!callActive ? (
-          <button
-            onClick={createCall}
-            disabled={isLoading}
-            className="bg-blue-500 text-white px-4 py-2 rounded disabled:bg-blue-300"
-          >
-            {isLoading ? "Creating call..." : "Start New Call"}
-          </button>
+          <div className="space-y-4">
+            <button
+              onClick={createCall}
+              disabled={isLoading}
+              className="bg-blue-500 text-white px-4 py-2 rounded disabled:bg-blue-300"
+            >
+              {isLoading ? "Creating call..." : "Start New Call"}
+            </button>
+
+            <button
+              onClick={playTestTone}
+              className="bg-green-500 text-white px-4 py-2 rounded ml-4"
+            >
+              Play Test Tone
+            </button>
+          </div>
         ) : (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -319,52 +466,6 @@ export default function HomePage() {
                 )}
               </div>
             </div>
-
-            {/* Add direct text input for testing */}
-            {callActive && (
-              <div className="mt-4 p-4 border border-gray-300 rounded">
-                <h3 className="text-lg font-semibold mb-2">
-                  Test Direct Text Input
-                </h3>
-                <p className="text-sm text-gray-500 mb-2">
-                  Use this to test the backend pipeline if audio is not working
-                </p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    className="flex-1 p-2 border border-gray-300 rounded"
-                    placeholder="Type a message to test..."
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        const input = e.currentTarget;
-                        const text = input.value.trim();
-                        if (text) {
-                          addDebugMessage(`Sending direct text: "${text}"`);
-                          pipe(JSON.stringify({ text, isFinal: true }));
-                          input.value = "";
-                        }
-                      }
-                    }}
-                  />
-                  <button
-                    className="bg-blue-500 text-white px-4 py-2 rounded"
-                    onClick={(e) => {
-                      const input = e.currentTarget
-                        .previousSibling as HTMLInputElement;
-                      const text = input.value.trim();
-                      if (text) {
-                        addDebugMessage(`Sending direct text: "${text}"`);
-                        pipe(JSON.stringify({ text, isFinal: true }));
-                        input.value = "";
-                      }
-                    }}
-                  >
-                    Send
-                  </button>
-                </div>
-              </div>
-            )}
-
             <div className="mt-6">
               <h2 className="text-xl font-semibold mb-2">Transcript</h2>
               <div className="bg-gray-100 p-4 rounded max-h-96 overflow-y-auto">
