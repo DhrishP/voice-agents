@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 
-type EventType = "audio.out" | "call.started" | "call.ended";
+export type EventType = "audio.out" | "call.started" | "call.ended" | "error";
 
-interface UseInducedCallOptions {
+export interface UseInducedCallOptions {
   onError?: (error: Error) => void;
 }
 
@@ -42,6 +42,19 @@ export function useInducedCall(
     hasInitializedRef.current = false;
     isConnectingRef.current = false;
   }, []);
+
+  const handleError = useCallback(
+    (error: Error) => {
+      const listeners = eventListeners.current.get("error");
+      if (listeners) {
+        listeners.forEach((listener) => listener(error));
+      }
+      if (options?.onError) {
+        options.onError(error);
+      }
+    },
+    [options]
+  );
 
   useEffect(() => {
     if (!callId) return;
@@ -133,18 +146,14 @@ export function useInducedCall(
           }
         } catch (error) {
           console.error("Error parsing WebSocket message:", error);
-          if (options?.onError) {
-            options.onError(new Error("Failed to process message from server"));
-          }
+          handleError(new Error("Failed to process message from server"));
         }
       };
 
       ws.onerror = (error) => {
         console.error("WebSocket error:", error);
         isConnectingRef.current = false;
-        if (options?.onError) {
-          options.onError(new Error("WebSocket connection error"));
-        }
+        handleError(new Error("WebSocket connection error"));
       };
 
       ws.onclose = (event) => {
