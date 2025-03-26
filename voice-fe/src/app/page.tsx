@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import useInducedCall, { EventType } from "@/hooks/useInducedCall";
+import useInducedCall from "@/hooks/useInducedCall";
 import React from "react";
 import UseWindow from "@/hooks/usewindow";
-
 
 export default function HomePage() {
   const [callId, setCallId] = useState<string | null>(null);
@@ -16,15 +15,12 @@ export default function HomePage() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
-  const audioQueueRef = useRef<string[]>([]);
-  const isPlayingRef = useRef<boolean>(false);
   const window = UseWindow();
   const addDebugMessage = useCallback((message: string) => {
     setDebugInfo((prev) => [message, ...prev].slice(0, 20));
     console.log("Debug:", message);
   }, []);
 
-  // Use our custom hooks
   const { callActive, callDuration, transcript, hangup, pipe, events } =
     useInducedCall(callId || "", {
       onError: (err) => {
@@ -33,7 +29,6 @@ export default function HomePage() {
       },
     });
 
-  // Initialize audio context once
   useEffect(() => {
     const win = typeof window !== "undefined" ? window : null;
     if (win && !audioContextRef.current) {
@@ -56,7 +51,6 @@ export default function HomePage() {
     };
   }, []);
 
-  // Set up audio output event listener for simple audio playback
   useEffect(() => {
     if (callActive && events) {
       addDebugMessage("Setting up audio output handler");
@@ -68,12 +62,10 @@ export default function HomePage() {
         }
 
         try {
-          // Resume AudioContext if it's suspended
           if (audioContextRef.current.state === "suspended") {
             await audioContextRef.current.resume();
           }
 
-          // Convert base64 to array buffer and play
           const audioArrayBuffer = Buffer.from(audioData, "base64").buffer;
           const audioBuffer = await audioContextRef.current.decodeAudioData(
             audioArrayBuffer
@@ -93,7 +85,6 @@ export default function HomePage() {
         }
       };
 
-      // Set up event listeners
       const unsubscribeAudio = events.on("audio.out", handleAudioChunk);
       return () => {
         unsubscribeAudio();
@@ -101,7 +92,6 @@ export default function HomePage() {
     }
   }, [callActive, events, addDebugMessage]);
 
-  // Start recording
   const startRecording = async () => {
     if (!callActive) {
       addDebugMessage("Cannot start recording - call not active");
@@ -129,22 +119,17 @@ export default function HomePage() {
         sampleRate: 8000,
       });
 
-      // Create source from microphone
       const source = audioContext.createMediaStreamSource(stream);
 
-      // Create script processor for raw audio data
       const processor = audioContext.createScriptProcessor(2048, 1, 1);
       processorRef.current = processor;
 
-      // Simply send raw audio data to backend
       processor.onaudioprocess = (e) => {
         const inputData = e.inputBuffer.getChannelData(0);
-        // Send raw Float32Array data directly
         const base64data = Buffer.from(inputData.buffer).toString("base64");
         pipe(base64data);
       };
 
-      // Connect the audio nodes
       source.connect(processor);
       processor.connect(audioContext.destination);
 
@@ -156,7 +141,6 @@ export default function HomePage() {
     }
   };
 
-  // Stop recording
   const stopRecording = () => {
     if (processorRef.current) {
       processorRef.current.disconnect();
@@ -223,13 +207,11 @@ export default function HomePage() {
         return;
       }
 
-      // Resume context if suspended
       if (audioContextRef.current.state === "suspended") {
         await audioContextRef.current.resume();
         addDebugMessage("Resumed audio context for test tone");
       }
 
-      // Create an oscillator
       const oscillator = audioContextRef.current.createOscillator();
       const gainNode = audioContextRef.current.createGain();
 
@@ -237,7 +219,7 @@ export default function HomePage() {
       oscillator.frequency.setValueAtTime(
         440,
         audioContextRef.current.currentTime
-      ); // 440 Hz
+      );
       gainNode.gain.setValueAtTime(0.5, audioContextRef.current.currentTime);
 
       oscillator.connect(gainNode);
@@ -246,7 +228,6 @@ export default function HomePage() {
       oscillator.start();
       addDebugMessage("Test tone started");
 
-      // Stop after 1 second
       setTimeout(() => {
         oscillator.stop();
         oscillator.disconnect();

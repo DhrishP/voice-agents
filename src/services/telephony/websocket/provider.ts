@@ -20,9 +20,13 @@ export class WebSocketProvider implements TelephonyProvider {
   private responseStartTime: number | null = null;
   private lastChunkTime: number | null = null;
   private CHUNK_TIMEOUT = 300;
+  private FINAL_CHUNK_TIMEOUT = 800;
   private inputBuffer: Int16Array[] = [];
   private inputBufferSize = 0;
-  private readonly MAX_INPUT_BUFFER_SIZE = 16000; // 2 seconds at 8kHz
+  private readonly MAX_INPUT_BUFFER_SIZE = 16000;
+  private _processTimeoutId: NodeJS.Timeout | null = null;
+  private _responseComplete: boolean = false;
+  private _responsePending: boolean = false;
 
   constructor(id: string) {
     this.id = id;
@@ -134,22 +138,18 @@ export class WebSocketProvider implements TelephonyProvider {
 
   private async processInputAudio(audioData: string): Promise<void> {
     try {
-      // Convert base64 to Float32Array (raw audio from frontend)
       const audioBuffer = Buffer.from(audioData, "base64");
       const float32Data = new Float32Array(audioBuffer.buffer);
 
-      // Convert Float32Array to Int16Array with proper scaling
       const samples = new Int16Array(float32Data.length);
       for (let i = 0; i < float32Data.length; i++) {
         const s = Math.max(-1, Math.min(1, float32Data[i]));
         samples[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
       }
 
-      // Add to input buffer
       this.inputBuffer.push(samples);
       this.inputBufferSize += samples.length;
 
-      // Process buffer if it's large enough
       if (this.inputBufferSize >= this.MAX_INPUT_BUFFER_SIZE) {
         await this.processAndSendInputBuffer();
       }
@@ -171,7 +171,6 @@ export class WebSocketProvider implements TelephonyProvider {
     try {
       if (this.inputBuffer.length === 0) return;
 
-      // Combine all samples
       const totalSamples = this.inputBufferSize;
       const combinedSamples = new Int16Array(totalSamples);
       let offset = 0;
@@ -181,10 +180,8 @@ export class WebSocketProvider implements TelephonyProvider {
         offset += buffer.length;
       }
 
-      // Encode to µ-law
       const mulawData = this.encodeToMuLaw(combinedSamples);
 
-      // Emit the processed chunk
       const eventData: AudioChunkData = {
         chunk: mulawData.toString("base64"),
         direction: "inbound",
@@ -202,7 +199,6 @@ export class WebSocketProvider implements TelephonyProvider {
         data: eventData,
       });
 
-      // Clear the buffer
       this.inputBuffer = [];
       this.inputBufferSize = 0;
 
@@ -231,19 +227,38 @@ export class WebSocketProvider implements TelephonyProvider {
   private async processAudioChunks(): Promise<void> {
     if (this.isProcessing || this.audioChunks.length === 0) return;
 
+    const now = Date.now();
+    const timeSinceLastChunk = now - (this.lastChunkTime || now);
+
+    if (
+      timeSinceLastChunk < this.FINAL_CHUNK_TIMEOUT &&
+      !this._responseComplete &&
+      this._responsePending
+    ) {
+      console.log(
+        `[${this.id}] Delaying chunk processing - only ${timeSinceLastChunk}ms since last chunk, waiting for more chunks`
+      );
+      if (this._processTimeoutId) {
+        clearTimeout(this._processTimeoutId);
+      }
+      this._processTimeoutId = setTimeout(
+        () => this.processAudioChunks(),
+        this.FINAL_CHUNK_TIMEOUT
+      );
+      return;
+    }
+
     this.isProcessing = true;
+    this._responsePending = false;
 
     try {
-      // Sort chunks by ID to ensure correct sequence
       this.audioChunks.sort((a, b) => a.id - b.id);
 
-      // Log chunk sequence for debugging
       console.log(
-        `[${this.id}] Processing chunks in sequence:`,
+        `[${this.id}] Processing ${this.audioChunks.length} chunks in sequence:`,
         this.audioChunks.map((c) => c.id).join(", ")
       );
 
-      // Combine all PCM data
       let combinedPcmData: Int16Array[] = [];
       let totalSamples = 0;
 
@@ -260,7 +275,6 @@ export class WebSocketProvider implements TelephonyProvider {
         }
       }
 
-      // Create combined buffer
       const combinedBuffer = new Int16Array(totalSamples);
       let offset = 0;
 
@@ -269,7 +283,6 @@ export class WebSocketProvider implements TelephonyProvider {
         offset += pcmChunk.length;
       }
 
-      // Create WAV header
       const wavHeader = this.createWavHeader(
         combinedBuffer.length * 2,
         8000,
@@ -277,13 +290,11 @@ export class WebSocketProvider implements TelephonyProvider {
         16
       );
 
-      // Combine header and PCM data
       const wavBuffer = Buffer.concat([
         wavHeader,
         Buffer.from(combinedBuffer.buffer),
       ]);
 
-      // Send combined audio
       if (this.ws?.readyState === WebSocket.OPEN) {
         this.ws.send(
           JSON.stringify({
@@ -312,6 +323,7 @@ export class WebSocketProvider implements TelephonyProvider {
       this.nextChunkId = 0;
       this.responseStartTime = null;
       this.lastChunkTime = null;
+      this._responseComplete = false;
     } catch (error) {
       console.error(`[${this.id}] Error processing audio chunks:`, error);
     } finally {
@@ -332,13 +344,12 @@ export class WebSocketProvider implements TelephonyProvider {
 
       const now = Date.now();
 
-      // If this is the first chunk of a new response
       if (this.audioChunks.length === 0) {
         this.responseStartTime = now;
+        this._responsePending = true;
       }
       this.lastChunkTime = now;
 
-      // Add chunk to queue
       this.audioChunks.push({
         data: dataBuffer,
         id: this.nextChunkId++,
@@ -350,18 +361,23 @@ export class WebSocketProvider implements TelephonyProvider {
           `Chunk size: ${dataBuffer.length} bytes`
       );
 
-      // Clear any existing timeout
-      if (this._processTimeout) {
-        clearTimeout(this._processTimeout);
+      if (this._processTimeoutId) {
+        clearTimeout(this._processTimeoutId);
       }
 
-      // Set a timeout to process chunks if no new chunks arrive
-      this._processTimeout = setTimeout(async () => {
+      const isSmallChunk = dataBuffer.length < 100;
+      const timeoutDuration = isSmallChunk
+        ? this.CHUNK_TIMEOUT
+        : this.FINAL_CHUNK_TIMEOUT;
+
+      this._processTimeoutId = setTimeout(async () => {
         const timeSinceLastChunk = Date.now() - (this.lastChunkTime || 0);
-        if (timeSinceLastChunk >= this.CHUNK_TIMEOUT) {
+
+        if (timeSinceLastChunk >= timeoutDuration || isSmallChunk) {
+          this._responseComplete = true;
           await this.processAudioChunks();
         }
-      }, this.CHUNK_TIMEOUT);
+      }, timeoutDuration);
     } catch (error: any) {
       console.error(`[${this.id}] Error queueing audio:`, error);
       if (this.ws?.readyState === WebSocket.OPEN) {
@@ -384,22 +400,19 @@ export class WebSocketProvider implements TelephonyProvider {
   ): Buffer {
     const buffer = Buffer.alloc(44);
 
-    // RIFF chunk descriptor
     buffer.write("RIFF", 0);
     buffer.writeUInt32LE(36 + dataLength, 4);
     buffer.write("WAVE", 8);
 
-    // fmt sub-chunk
     buffer.write("fmt ", 12);
-    buffer.writeUInt32LE(16, 16); // fmt chunk size
-    buffer.writeUInt16LE(1, 20); // audio format (PCM)
+    buffer.writeUInt32LE(16, 16);
+    buffer.writeUInt16LE(1, 20);
     buffer.writeUInt16LE(numChannels, 22);
     buffer.writeUInt32LE(sampleRate, 24);
-    buffer.writeUInt32LE((sampleRate * numChannels * bitsPerSample) / 8, 28); // byte rate
-    buffer.writeUInt16LE((numChannels * bitsPerSample) / 8, 32); // block align
+    buffer.writeUInt32LE((sampleRate * numChannels * bitsPerSample) / 8, 28);
+    buffer.writeUInt16LE((numChannels * bitsPerSample) / 8, 32);
     buffer.writeUInt16LE(bitsPerSample, 34);
 
-    // data sub-chunk
     buffer.write("data", 36);
     buffer.writeUInt32LE(dataLength, 40);
 
@@ -407,11 +420,9 @@ export class WebSocketProvider implements TelephonyProvider {
   }
 
   public async cancel(): Promise<void> {
-    // Process any remaining input buffer before cancelling
     await this.processAndSendInputBuffer();
 
     if (this.ws) {
-      // Clear any pending chunks and state
       this.audioChunks = [];
       this.isProcessing = false;
       this.nextChunkId = 0;
@@ -419,12 +430,14 @@ export class WebSocketProvider implements TelephonyProvider {
       this.lastChunkTime = null;
       this.inputBuffer = [];
       this.inputBufferSize = 0;
+      this._responseComplete = false;
+      this._responsePending = false;
 
-      if (this._processTimeout) {
-        clearTimeout(this._processTimeout);
+      if (this._processTimeoutId) {
+        clearTimeout(this._processTimeoutId);
+        this._processTimeoutId = null;
       }
 
-      // Emit cancel event
       eventBus.emit("call.audio.cancelled", {
         ctx: {
           callId: this.id,
@@ -433,7 +446,6 @@ export class WebSocketProvider implements TelephonyProvider {
         },
       });
 
-      // Send cancel event to client
       this.ws.send(
         JSON.stringify({
           event: "cancel",
