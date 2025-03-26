@@ -6,7 +6,6 @@ const alawmulaw = require("alawmulaw");
 
 interface AudioChunk {
   data: Buffer;
-  timestamp: number;
   id: number;
 }
 
@@ -18,7 +17,7 @@ export class WebSocketProvider implements TelephonyProvider {
   private audioChunks: AudioChunk[] = [];
   private isProcessing: boolean = false;
   private nextChunkId: number = 0;
-  private chunkTimeout: NodeJS.Timeout | null = null;
+  private isGenerating: boolean = false;
 
   constructor(id: string) {
     this.id = id;
@@ -253,29 +252,36 @@ export class WebSocketProvider implements TelephonyProvider {
     this.isProcessing = true;
 
     try {
-      // Sort chunks by ID to ensure correct sequence
+      // Sort chunks by ID to ensure correct sequence (though they should already be in sequence from ElevenLabs)
       this.audioChunks.sort((a, b) => a.id - b.id);
+
+      // Log chunk sequence for debugging
+      console.log(
+        `[${this.id}] Processing chunks in sequence:`,
+        this.audioChunks.map((c) => c.id).join(", ")
+      );
 
       // Combine all PCM data
       let combinedPcmData: Int16Array[] = [];
+      let totalSamples = 0;
 
       for (const chunk of this.audioChunks) {
-        // Convert µ-law to PCM for each chunk
-        const pcmData = alawmulaw.mulaw.decode(new Uint8Array(chunk.data));
-        combinedPcmData.push(new Int16Array(pcmData.buffer));
+        try {
+          const pcmData = alawmulaw.mulaw.decode(new Uint8Array(chunk.data));
+          combinedPcmData.push(new Int16Array(pcmData.buffer));
+          totalSamples += pcmData.length;
+        } catch (error) {
+          console.error(
+            `[${this.id}] Error decoding chunk ${chunk.id}:`,
+            error
+          );
+        }
       }
 
-      // Calculate total length
-      const totalLength = combinedPcmData.reduce(
-        (acc, arr) => acc + arr.length,
-        0
-      );
-
       // Create combined buffer
-      const combinedBuffer = new Int16Array(totalLength);
+      const combinedBuffer = new Int16Array(totalSamples);
       let offset = 0;
 
-      // Copy data
       for (const pcmChunk of combinedPcmData) {
         combinedBuffer.set(pcmChunk, offset);
         offset += pcmChunk.length;
@@ -304,11 +310,15 @@ export class WebSocketProvider implements TelephonyProvider {
             format: "wav",
             sampleRate: 8000,
             timestamp: Date.now(),
+            totalChunks: this.audioChunks.length,
+            processedIds: this.audioChunks.map((c) => c.id),
           })
         );
 
         console.log(
-          `[${this.id}] Sent combined audio of ${this.audioChunks.length} chunks, total size: ${wavBuffer.length} bytes`
+          `[${this.id}] Sent combined audio of ${this.audioChunks.length} chunks, ` +
+            `total size: ${wavBuffer.length} bytes, ` +
+            `chunk IDs: ${this.audioChunks.map((c) => c.id).join(", ")}`
         );
       }
 
@@ -318,9 +328,9 @@ export class WebSocketProvider implements TelephonyProvider {
       console.error(`[${this.id}] Error processing audio chunks:`, error);
     } finally {
       this.isProcessing = false;
-      if (this.chunkTimeout) {
-        clearTimeout(this.chunkTimeout);
-        this.chunkTimeout = null;
+      // If we're not generating anymore and this was the last chunk, reset the chunk counter
+      if (!this.isGenerating) {
+        this.nextChunkId = 0;
       }
     }
   }
@@ -336,28 +346,26 @@ export class WebSocketProvider implements TelephonyProvider {
         ? audioData
         : Buffer.from(audioData, "base64");
 
+      // Mark that we're receiving chunks
+      this.isGenerating = true;
+
       // Add chunk to queue
       this.audioChunks.push({
         data: dataBuffer,
-        timestamp: Date.now(),
         id: this.nextChunkId++,
       });
 
       console.log(
-        `[${this.id}] Added audio chunk ${this.nextChunkId - 1}. Queue size: ${
-          this.audioChunks.length
-        }`
+        `[${this.id}] Added audio chunk ${this.nextChunkId - 1}. ` +
+          `Queue size: ${this.audioChunks.length}, ` +
+          `Chunk size: ${dataBuffer.length} bytes`
       );
 
-      // Clear any existing timeout
-      if (this.chunkTimeout) {
-        clearTimeout(this.chunkTimeout);
+      // Process chunks if we have accumulated enough or if this seems to be the last chunk
+      if (dataBuffer.length < 10000 || this.audioChunks.length >= 5) {
+        this.isGenerating = false;
+        await this.processAudioChunks();
       }
-
-      // Set a timeout to process chunks (wait for more chunks for 100ms)
-      this.chunkTimeout = setTimeout(() => {
-        this.processAudioChunks();
-      }, 100);
     } catch (error: any) {
       console.error(`[${this.id}] Error queueing audio:`, error);
       if (this.ws?.readyState === WebSocket.OPEN) {
@@ -404,13 +412,11 @@ export class WebSocketProvider implements TelephonyProvider {
 
   public async cancel(): Promise<void> {
     if (this.ws) {
-      // Clear any pending chunks and timeout
+      // Clear any pending chunks
       this.audioChunks = [];
-      if (this.chunkTimeout) {
-        clearTimeout(this.chunkTimeout);
-        this.chunkTimeout = null;
-      }
       this.isProcessing = false;
+      this.isGenerating = false;
+      this.nextChunkId = 0;
 
       // Emit cancel event
       eventBus.emit("call.audio.cancelled", {
