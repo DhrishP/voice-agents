@@ -1,7 +1,7 @@
 import WebSocket from "ws";
 import { TelephonyProvider } from "../../../types/providers/telephony";
 import eventBus from "../../../engine";
-import { VoiceCallJobData } from "../../../types/voice-call";
+import { VoiceCallJobData, AudioChunkData } from "../../../types/voice-call";
 const alawmulaw = require("alawmulaw");
 
 interface AudioChunk {
@@ -20,8 +20,9 @@ export class WebSocketProvider implements TelephonyProvider {
   private responseStartTime: number | null = null;
   private lastChunkTime: number | null = null;
   private CHUNK_TIMEOUT = 300;
-  private inputProcessor: ScriptProcessorNode | null = null;
-  private inputStream: MediaStream | null = null;
+  private inputBuffer: Int16Array[] = [];
+  private inputBufferSize = 0;
+  private readonly MAX_INPUT_BUFFER_SIZE = 16000; // 2 seconds at 8kHz
 
   constructor(id: string) {
     this.id = id;
@@ -137,28 +138,21 @@ export class WebSocketProvider implements TelephonyProvider {
       const audioBuffer = Buffer.from(audioData, "base64");
       const float32Data = new Float32Array(audioBuffer.buffer);
 
-      // Convert Float32Array to Int16Array
+      // Convert Float32Array to Int16Array with proper scaling
       const samples = new Int16Array(float32Data.length);
       for (let i = 0; i < float32Data.length; i++) {
         const s = Math.max(-1, Math.min(1, float32Data[i]));
         samples[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
       }
 
-      // Encode to µ-law
-      const mulawData = this.encodeToMuLaw(samples);
+      // Add to input buffer
+      this.inputBuffer.push(samples);
+      this.inputBufferSize += samples.length;
 
-      // Emit the processed chunk
-      eventBus.emit("call.audio.chunk.received", {
-        ctx: {
-          callId: this.id,
-          provider: "websocket",
-          timestamp: Date.now(),
-        },
-        data: {
-          chunk: mulawData.toString("base64"),
-          direction: "inbound",
-        },
-      });
+      // Process buffer if it's large enough
+      if (this.inputBufferSize >= this.MAX_INPUT_BUFFER_SIZE) {
+        await this.processAndSendInputBuffer();
+      }
     } catch (error) {
       console.error(`[${this.id}] Error processing input audio:`, error);
       if (this.ws?.readyState === WebSocket.OPEN) {
@@ -170,6 +164,53 @@ export class WebSocketProvider implements TelephonyProvider {
           })
         );
       }
+    }
+  }
+
+  private async processAndSendInputBuffer(): Promise<void> {
+    try {
+      if (this.inputBuffer.length === 0) return;
+
+      // Combine all samples
+      const totalSamples = this.inputBufferSize;
+      const combinedSamples = new Int16Array(totalSamples);
+      let offset = 0;
+
+      for (const buffer of this.inputBuffer) {
+        combinedSamples.set(buffer, offset);
+        offset += buffer.length;
+      }
+
+      // Encode to µ-law
+      const mulawData = this.encodeToMuLaw(combinedSamples);
+
+      // Emit the processed chunk
+      const eventData: AudioChunkData = {
+        chunk: mulawData.toString("base64"),
+        direction: "inbound",
+        sampleRate: 8000,
+        format: "mulaw",
+        samples: totalSamples,
+      };
+
+      eventBus.emit("call.audio.chunk.received", {
+        ctx: {
+          callId: this.id,
+          provider: "websocket",
+          timestamp: Date.now(),
+        },
+        data: eventData,
+      });
+
+      // Clear the buffer
+      this.inputBuffer = [];
+      this.inputBufferSize = 0;
+
+      console.log(
+        `[${this.id}] Processed and sent ${totalSamples} input samples`
+      );
+    } catch (error) {
+      console.error(`[${this.id}] Error processing input buffer:`, error);
     }
   }
 
@@ -366,6 +407,9 @@ export class WebSocketProvider implements TelephonyProvider {
   }
 
   public async cancel(): Promise<void> {
+    // Process any remaining input buffer before cancelling
+    await this.processAndSendInputBuffer();
+
     if (this.ws) {
       // Clear any pending chunks and state
       this.audioChunks = [];
@@ -373,6 +417,9 @@ export class WebSocketProvider implements TelephonyProvider {
       this.nextChunkId = 0;
       this.responseStartTime = null;
       this.lastChunkTime = null;
+      this.inputBuffer = [];
+      this.inputBufferSize = 0;
+
       if (this._processTimeout) {
         clearTimeout(this._processTimeout);
       }
@@ -419,7 +466,6 @@ export class WebSocketProvider implements TelephonyProvider {
   }
 
   public async transfer(toNumber: string): Promise<void> {
-    // Transfer not implemented for WebSocket provider
     console.log("Transfer not supported in WebSocket provider");
     await this.hangup();
   }

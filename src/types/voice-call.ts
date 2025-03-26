@@ -52,3 +52,11 @@ export const VoiceCallJobResultSchema = z.object({
 });
 
 export type VoiceCallJobResult = z.infer<typeof VoiceCallJobResultSchema>;
+
+export interface AudioChunkData {
+  chunk: string;
+  direction: "inbound" | "outbound";
+  sampleRate?: number;
+  format?: string;
+  samples?: number;
+}
