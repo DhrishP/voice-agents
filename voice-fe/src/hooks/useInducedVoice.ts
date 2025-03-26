@@ -1,5 +1,13 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 
+export enum CallState {
+  IDLE = "idle",
+  CONNECTING = "connecting",
+  CONNECTED = "connected",
+  ENDED = "ended",
+  ERROR = "error",
+}
+
 export type EventType =
   | "audio.out"
   | "call.started"
@@ -7,24 +15,64 @@ export type EventType =
   | "error"
   | "call.audio.cancelled";
 
-export interface UseInducedCallOptions {
-  onError?: (error: Error) => void;
+interface CreateCallOptions {
+  prompt?: string;
+  sttProvider?: string;
+  ttsProvider?: string;
+  llmProvider?: string;
+  llmModel?: string;
+  sttModel?: string;
+  ttsModel?: string;
+  language?: string;
 }
 
-export function useInducedCall(
-  callId: string,
-  options?: UseInducedCallOptions
-) {
-  const [callActive, setCallActive] = useState(false);
+async function createCall(options?: CreateCallOptions) {
+  try {
+    const baseUrl =
+      process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3033";
+    const response = await fetch(`${baseUrl}/session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        prompt:
+          options?.prompt ||
+          "You are a helpful voice assistant. Keep your responses concise and clear. Answer the user's questions helpfully.",
+        sttProvider: "deepgram",
+        ttsProvider: "elevenlabs",
+        llmProvider: "openai",
+        llmModel: "gpt-4",
+        sttModel: "nova-2",
+        ttsModel: "eleven_multilingual_v2",
+        language: "en-US",
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to create call: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return {
+      callId: data.callId,
+      status: data.status,
+    };
+  } catch (error) {
+    console.error("Error creating call:", error);
+    throw error;
+  }
+}
+
+export function useInducedVoice() {
+  const [callId, setCallId] = useState<string>("");
+  const [callState, setCallState] = useState<CallState>(CallState.IDLE);
   const [callDuration, setCallDuration] = useState(0);
-  const [transcript, setTranscript] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const webSocketRef = useRef<WebSocket | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number | null>(null);
-  const hasInitializedRef = useRef(false);
   const isConnectingRef = useRef(false);
-  const hasStartedRef = useRef(false);
-
   const eventListeners = useRef<Map<EventType, Set<(data: any) => void>>>(
     new Map()
   );
@@ -42,24 +90,10 @@ export function useInducedCall(
       webSocketRef.current = null;
     }
 
-    setCallActive(false);
+    setCallState(CallState.ENDED);
     startTimeRef.current = null;
-    hasInitializedRef.current = false;
     isConnectingRef.current = false;
   }, []);
-
-  const handleError = useCallback(
-    (error: Error) => {
-      const listeners = eventListeners.current.get("error");
-      if (listeners) {
-        listeners.forEach((listener) => listener(error));
-      }
-      if (options?.onError) {
-        options.onError(error);
-      }
-    },
-    [options]
-  );
 
   useEffect(() => {
     if (!callId) return;
@@ -73,6 +107,7 @@ export function useInducedCall(
       }
 
       isConnectingRef.current = true;
+      setCallState(CallState.CONNECTING);
 
       const wsUrl = `${
         process.env.NEXT_PUBLIC_BACKEND_WS_URL || "ws://localhost:3033"
@@ -92,27 +127,23 @@ export function useInducedCall(
 
       ws.onopen = () => {
         console.log("WebSocket connection established");
-        setCallActive(true);
+        setCallState(CallState.CONNECTED);
         isConnectingRef.current = false;
         webSocketRef.current = ws;
+        startTimeRef.current = Date.now();
 
-        if (!hasStartedRef.current) {
-          hasStartedRef.current = true;
-          startTimeRef.current = Date.now();
-
-          if (timerRef.current) {
-            clearInterval(timerRef.current);
-          }
-
-          timerRef.current = setInterval(() => {
-            if (startTimeRef.current) {
-              const elapsed = Math.floor(
-                (Date.now() - startTimeRef.current) / 1000
-              );
-              setCallDuration(elapsed);
-            }
-          }, 1000);
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
         }
+
+        timerRef.current = setInterval(() => {
+          if (startTimeRef.current) {
+            const elapsed = Math.floor(
+              (Date.now() - startTimeRef.current) / 1000
+            );
+            setCallDuration(elapsed);
+          }
+        }, 1000);
       };
 
       ws.onmessage = (event) => {
@@ -121,12 +152,6 @@ export function useInducedCall(
           console.log("Received message:", message);
 
           if (message.event === "audio.out") {
-            console.log(
-              `Received audio.out event, data length: ${
-                message.data ? message.data.length : "undefined"
-              }`
-            );
-
             if (!message.data) {
               console.error("Audio.out event missing data payload");
               return;
@@ -135,8 +160,6 @@ export function useInducedCall(
             const listeners = eventListeners.current.get("audio.out");
             if (listeners) {
               listeners.forEach((listener) => listener(message.data));
-            } else {
-              console.warn("No listeners registered for audio.out events");
             }
           } else if (message.event === "call.ended") {
             handleCallEnd();
@@ -152,32 +175,22 @@ export function useInducedCall(
               listeners.forEach((listener) => listener({}));
             }
           }
-
-          if (message.transcription) {
-            setTranscript((prev) => [...prev, message.transcription]);
-          }
         } catch (error) {
           console.error("Error parsing WebSocket message:", error);
-          handleError(new Error("Failed to process message from server"));
+          setCallState(CallState.ERROR);
         }
       };
 
       ws.onerror = (error) => {
         console.error("WebSocket error:", error);
         isConnectingRef.current = false;
-        handleError(new Error("WebSocket connection error"));
+        setCallState(CallState.ERROR);
       };
 
-      ws.onclose = (event) => {
-        console.log(
-          `WebSocket connection closed. Code: ${event.code}, Reason: ${
-            event.reason || "No reason provided"
-          }`
-        );
+      ws.onclose = () => {
         isConnectingRef.current = false;
         webSocketRef.current = null;
         handleCallEnd();
-        hasStartedRef.current = false;
       };
     };
 
@@ -188,10 +201,9 @@ export function useInducedCall(
         webSocketRef.current.close();
       }
       handleCallEnd();
-      hasStartedRef.current = false;
       isConnectingRef.current = false;
     };
-  }, [callId]);
+  }, [callId, handleCallEnd]);
 
   const on = useCallback((event: EventType, callback: (data: any) => void) => {
     if (!eventListeners.current.has(event)) {
@@ -206,8 +218,6 @@ export function useInducedCall(
     };
   }, []);
 
-  const events = useMemo(() => ({ on }), [on]);
-
   const hangup = useCallback(() => {
     if (
       webSocketRef.current &&
@@ -220,6 +230,7 @@ export function useInducedCall(
       );
       handleCallEnd();
     }
+    setCallId("");
   }, [handleCallEnd]);
 
   const pipe = useCallback(
@@ -237,37 +248,6 @@ export function useInducedCall(
       }
 
       try {
-        if (data.startsWith("{")) {
-          try {
-            const parsedData = JSON.parse(data);
-            if (parsedData.text) {
-              webSocketRef.current.send(
-                JSON.stringify({
-                  event: "text",
-                  data: parsedData.text,
-                  isFinal: parsedData.isFinal,
-                })
-              );
-              console.log(`Sent text: "${parsedData.text}"`);
-              return true;
-            }
-          } catch (e) {
-            console.error("Failed to parse JSON data:", e);
-          }
-        }
-
-        console.log(`Sending audio data of length ${data.length} bytes`);
-
-        if (!data || data.length === 0) {
-          console.warn("Empty audio data received, not sending");
-          return false;
-        }
-
-        if (!/^[A-Za-z0-9+/]*={0,2}$/.test(data)) {
-          console.error("Invalid base64 data received, not sending");
-          return false;
-        }
-
         webSocketRef.current.send(
           JSON.stringify({
             event: "audio",
@@ -288,14 +268,36 @@ export function useInducedCall(
     [callId]
   );
 
+  const startCall = useCallback(async (options?: CreateCallOptions) => {
+    try {
+      setIsLoading(true);
+      const response = await createCall({
+        prompt: options?.prompt,
+        sttProvider: options?.sttProvider || "deepgram",
+        ttsProvider: options?.ttsProvider || "elevenlabs",
+        llmProvider: options?.llmProvider || "openai",
+        llmModel: options?.llmModel || "gpt-4",
+        sttModel: options?.sttModel || "nova-2",
+        ttsModel: options?.ttsModel || "eleven_multilingual_v2",
+        language: options?.language || "en-US",
+      });
+      setCallId(response.callId);
+    } catch (error) {
+      console.error("Failed to start call:", error);
+      setCallState(CallState.ERROR);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   return {
-    callActive,
+    callState,
     callDuration,
-    transcript,
     hangup,
     pipe,
-    events,
+    on,
+    startCall,
+    isLoading,
   };
 }
-
-export default useInducedCall;
