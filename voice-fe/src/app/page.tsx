@@ -15,6 +15,9 @@ export default function HomePage() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const audioQueueRef = useRef<string[]>([]);
+  const isPlayingRef = useRef<boolean>(false);
+  const audioSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const window = UseWindow();
   const addDebugMessage = useCallback((message: string) => {
     setDebugInfo((prev) => [message, ...prev].slice(0, 20));
@@ -73,8 +76,16 @@ export default function HomePage() {
           const source = audioContextRef.current.createBufferSource();
           source.buffer = audioBuffer;
           source.connect(audioContextRef.current.destination);
+
+          audioSourcesRef.current.push(source);
+
           source.start(0);
-          source.onended = () => source.disconnect();
+          source.onended = () => {
+            source.disconnect();
+            audioSourcesRef.current = audioSourcesRef.current.filter(
+              (s) => s !== source
+            );
+          };
         } catch (error) {
           console.error("Error playing audio:", error);
           addDebugMessage(
@@ -85,9 +96,43 @@ export default function HomePage() {
         }
       };
 
+      const handleCancel = () => {
+        addDebugMessage("Received cancel event - stopping all audio playback");
+
+        if (audioSourcesRef.current.length > 0) {
+          audioSourcesRef.current.forEach((source) => {
+            try {
+              source.stop();
+              source.disconnect();
+            } catch (err) {
+              console.log(err);
+            }
+          });
+          audioSourcesRef.current = [];
+        }
+
+        audioQueueRef.current = [];
+        isPlayingRef.current = false;
+      };
+
       const unsubscribeAudio = events.on("audio.out", handleAudioChunk);
+      const unsubscribeCancel = events.on("call.audio.cancelled", handleCancel);
+
       return () => {
         unsubscribeAudio();
+        unsubscribeCancel();
+
+        if (audioSourcesRef.current.length > 0) {
+          audioSourcesRef.current.forEach((source) => {
+            try {
+              source.stop();
+              source.disconnect();
+            } catch (err) {
+              console.log(err);
+            }
+          });
+          audioSourcesRef.current = [];
+        }
       };
     }
   }, [callActive, events, addDebugMessage]);

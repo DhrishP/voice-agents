@@ -489,7 +489,5 @@ export class WebSocketProvider implements TelephonyProvider {
   public getCallUuid(): string | null {
     return this.callUuid;
   }
-
-  private _processTimeout: NodeJS.Timeout | null = null;
 }
 export default WebSocketProvider;
