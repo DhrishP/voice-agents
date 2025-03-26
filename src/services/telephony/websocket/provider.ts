@@ -17,7 +17,11 @@ export class WebSocketProvider implements TelephonyProvider {
   private audioChunks: AudioChunk[] = [];
   private isProcessing: boolean = false;
   private nextChunkId: number = 0;
-  private isGenerating: boolean = false;
+  private responseStartTime: number | null = null;
+  private lastChunkTime: number | null = null;
+  private CHUNK_TIMEOUT = 300;
+  private inputProcessor: ScriptProcessorNode | null = null;
+  private inputStream: MediaStream | null = null;
 
   constructor(id: string) {
     this.id = id;
@@ -78,7 +82,7 @@ export class WebSocketProvider implements TelephonyProvider {
       this.ws.readyState
     );
 
-    this.ws.on("message", (data: Buffer) => {
+    this.ws.on("message", async (data: Buffer) => {
       try {
         const message = JSON.parse(data.toString());
 
@@ -87,73 +91,7 @@ export class WebSocketProvider implements TelephonyProvider {
             throw new Error("Invalid audio data format");
           }
 
-          try {
-            const audioBuffer = Buffer.from(message.data, "base64");
-
-            if (audioBuffer.length === 0) {
-              return;
-            }
-
-            const hasAudio = audioBuffer.some((byte) => byte !== 0);
-            if (!hasAudio) {
-              return;
-            }
-
-            const audioFormat = message.format || "audio/l16";
-            const sourceSampleRate = message.sampleRate || 8000;
-            const targetSampleRate = 8000;
-            const channels = message.channels || 1;
-
-            let processedAudio;
-
-            try {
-              let samples = new Int16Array(
-                audioBuffer.buffer,
-                audioBuffer.byteOffset,
-                audioBuffer.byteLength / 2
-              );
-
-              if (sourceSampleRate !== targetSampleRate) {
-                if (sourceSampleRate > targetSampleRate) {
-                  const ratio = Math.floor(sourceSampleRate / targetSampleRate);
-                  const resampledLength = Math.floor(samples.length / ratio);
-                  const resampledSamples = new Int16Array(resampledLength);
-
-                  for (let i = 0; i < resampledLength; i++) {
-                    resampledSamples[i] = samples[i * ratio];
-                  }
-
-                  samples = resampledSamples;
-                  console.log(
-                    `[${this.id}] Downsampled to ${samples.length} samples`
-                  );
-                }
-              }
-
-              processedAudio = this.encodeToMuLaw(samples);
-
-              eventBus.emit("call.audio.chunk.received", {
-                ctx: {
-                  callId: this.id,
-                  provider: "websocket",
-                  timestamp: Date.now(),
-                },
-                data: {
-                  chunk: Buffer.from(processedAudio).toString("base64"),
-                  direction: "inbound",
-                },
-              });
-            } catch (encodeError) {
-              console.error(
-                `[${this.id}] Error encoding audio to μ-Law:`,
-                encodeError
-              );
-              throw encodeError;
-            }
-          } catch (e) {
-            console.error(`[${this.id}] Error processing audio chunk:`, e);
-            throw new Error("Invalid audio data");
-          }
+          await this.processInputAudio(message.data);
         }
       } catch (error: any) {
         console.error(
@@ -193,55 +131,58 @@ export class WebSocketProvider implements TelephonyProvider {
     });
   }
 
-  private encodeToMuLaw(input: Buffer | Int16Array): Buffer {
+  private async processInputAudio(audioData: string): Promise<void> {
     try {
-      // Convert input to Int16Array if it's a Buffer
-      let samples: Int16Array;
-      if (Buffer.isBuffer(input)) {
-        console.log(`Converting Buffer to Int16Array, length: ${input.length}`);
-        samples = new Int16Array(
-          input.buffer,
-          input.byteOffset,
-          input.byteLength / 2
-        );
-        console.log(`Created Int16Array with ${samples.length} samples`);
-      } else {
-        // Input is already Int16Array
-        samples = input;
+      // Convert base64 to Float32Array (raw audio from frontend)
+      const audioBuffer = Buffer.from(audioData, "base64");
+      const float32Data = new Float32Array(audioBuffer.buffer);
+
+      // Convert Float32Array to Int16Array
+      const samples = new Int16Array(float32Data.length);
+      for (let i = 0; i < float32Data.length; i++) {
+        const s = Math.max(-1, Math.min(1, float32Data[i]));
+        samples[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
       }
 
-      let encodedData;
+      // Encode to µ-law
+      const mulawData = this.encodeToMuLaw(samples);
 
-      // Use only the library implementation
-      try {
-        if (alawmulaw && alawmulaw.mulaw) {
-          encodedData = alawmulaw.mulaw.encode(samples);
-        } else {
-          throw new Error("alawmulaw library is required but not available");
-        }
-      } catch (libraryError) {
-        console.error(`Error using μ-Law library: ${libraryError}`);
-        throw libraryError; // Re-throw to prevent fallback to custom implementation
-      }
-
-      // Return the raw μ-law data as Buffer for use with Deepgram
-      const result = Buffer.from(encodedData.buffer);
-
-      return result;
+      // Emit the processed chunk
+      eventBus.emit("call.audio.chunk.received", {
+        ctx: {
+          callId: this.id,
+          provider: "websocket",
+          timestamp: Date.now(),
+        },
+        data: {
+          chunk: mulawData.toString("base64"),
+          direction: "inbound",
+        },
+      });
     } catch (error) {
-      console.error(`Error encoding to μ-Law: ${error}`);
-
-      // Return original data as fallback if it's a buffer
-      if (Buffer.isBuffer(input)) {
-        console.log(
-          `Returning original buffer as fallback, length: ${input.length}`
+      console.error(`[${this.id}] Error processing input audio:`, error);
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(
+          JSON.stringify({
+            event: "error",
+            message: "Failed to process audio input",
+            timestamp: Date.now(),
+          })
         );
-        return input;
       }
-      // Or convert Int16Array to Buffer
-      console.log(
-        `Returning original Int16Array as Buffer fallback, length: ${input.length}`
-      );
+    }
+  }
+
+  private encodeToMuLaw(input: Int16Array): Buffer {
+    try {
+      if (!alawmulaw?.mulaw) {
+        throw new Error("alawmulaw library is required but not available");
+      }
+
+      const encodedData = alawmulaw.mulaw.encode(input);
+      return Buffer.from(encodedData.buffer);
+    } catch (error) {
+      console.error(`[${this.id}] Error encoding to μ-Law:`, error);
       return Buffer.from(input.buffer);
     }
   }
@@ -252,7 +193,7 @@ export class WebSocketProvider implements TelephonyProvider {
     this.isProcessing = true;
 
     try {
-      // Sort chunks by ID to ensure correct sequence (though they should already be in sequence from ElevenLabs)
+      // Sort chunks by ID to ensure correct sequence
       this.audioChunks.sort((a, b) => a.id - b.id);
 
       // Log chunk sequence for debugging
@@ -318,20 +259,22 @@ export class WebSocketProvider implements TelephonyProvider {
         console.log(
           `[${this.id}] Sent combined audio of ${this.audioChunks.length} chunks, ` +
             `total size: ${wavBuffer.length} bytes, ` +
-            `chunk IDs: ${this.audioChunks.map((c) => c.id).join(", ")}`
+            `chunk IDs: ${this.audioChunks.map((c) => c.id).join(", ")}, ` +
+            `total response time: ${
+              this.responseStartTime
+                ? Date.now() - this.responseStartTime
+                : "unknown"
+            }ms`
         );
       }
-
-      // Clear the chunks
       this.audioChunks = [];
+      this.nextChunkId = 0;
+      this.responseStartTime = null;
+      this.lastChunkTime = null;
     } catch (error) {
       console.error(`[${this.id}] Error processing audio chunks:`, error);
     } finally {
       this.isProcessing = false;
-      // If we're not generating anymore and this was the last chunk, reset the chunk counter
-      if (!this.isGenerating) {
-        this.nextChunkId = 0;
-      }
     }
   }
 
@@ -346,8 +289,13 @@ export class WebSocketProvider implements TelephonyProvider {
         ? audioData
         : Buffer.from(audioData, "base64");
 
-      // Mark that we're receiving chunks
-      this.isGenerating = true;
+      const now = Date.now();
+
+      // If this is the first chunk of a new response
+      if (this.audioChunks.length === 0) {
+        this.responseStartTime = now;
+      }
+      this.lastChunkTime = now;
 
       // Add chunk to queue
       this.audioChunks.push({
@@ -361,11 +309,18 @@ export class WebSocketProvider implements TelephonyProvider {
           `Chunk size: ${dataBuffer.length} bytes`
       );
 
-      // Process chunks if we have accumulated enough or if this seems to be the last chunk
-      if (dataBuffer.length < 10000 || this.audioChunks.length >= 5) {
-        this.isGenerating = false;
-        await this.processAudioChunks();
+      // Clear any existing timeout
+      if (this._processTimeout) {
+        clearTimeout(this._processTimeout);
       }
+
+      // Set a timeout to process chunks if no new chunks arrive
+      this._processTimeout = setTimeout(async () => {
+        const timeSinceLastChunk = Date.now() - (this.lastChunkTime || 0);
+        if (timeSinceLastChunk >= this.CHUNK_TIMEOUT) {
+          await this.processAudioChunks();
+        }
+      }, this.CHUNK_TIMEOUT);
     } catch (error: any) {
       console.error(`[${this.id}] Error queueing audio:`, error);
       if (this.ws?.readyState === WebSocket.OPEN) {
@@ -412,11 +367,15 @@ export class WebSocketProvider implements TelephonyProvider {
 
   public async cancel(): Promise<void> {
     if (this.ws) {
-      // Clear any pending chunks
+      // Clear any pending chunks and state
       this.audioChunks = [];
       this.isProcessing = false;
-      this.isGenerating = false;
       this.nextChunkId = 0;
+      this.responseStartTime = null;
+      this.lastChunkTime = null;
+      if (this._processTimeout) {
+        clearTimeout(this._processTimeout);
+      }
 
       // Emit cancel event
       eventBus.emit("call.audio.cancelled", {
@@ -472,5 +431,7 @@ export class WebSocketProvider implements TelephonyProvider {
   public getCallUuid(): string | null {
     return this.callUuid;
   }
+
+  private _processTimeout: NodeJS.Timeout | null = null;
 }
 export default WebSocketProvider;

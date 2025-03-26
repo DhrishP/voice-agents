@@ -5,6 +5,7 @@ import useInducedCall, { EventType } from "@/hooks/useInducedCall";
 import React from "react";
 import UseWindow from "@/hooks/usewindow";
 
+
 export default function HomePage() {
   const [callId, setCallId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -131,21 +132,16 @@ export default function HomePage() {
       // Create source from microphone
       const source = audioContext.createMediaStreamSource(stream);
 
-      // Create script processor for raw PCM data
+      // Create script processor for raw audio data
       const processor = audioContext.createScriptProcessor(2048, 1, 1);
       processorRef.current = processor;
 
-      // Handle audio processing
+      // Simply send raw audio data to backend
       processor.onaudioprocess = (e) => {
         const inputData = e.inputBuffer.getChannelData(0);
-        const samples = new Int16Array(inputData.length);
-        for (let i = 0; i < inputData.length; i++) {
-          const s = Math.max(-1, Math.min(1, inputData[i]));
-          samples[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-        }
-        const base64data = Buffer.from(samples.buffer).toString("base64");
+        // Send raw Float32Array data directly
+        const base64data = Buffer.from(inputData.buffer).toString("base64");
         pipe(base64data);
-        audioChunksRef.current++;
       };
 
       // Connect the audio nodes
@@ -153,7 +149,7 @@ export default function HomePage() {
       processor.connect(audioContext.destination);
 
       setIsRecording(true);
-      addDebugMessage("Recording started");
+      addDebugMessage("Recording started - sending raw audio to backend");
     } catch (error) {
       console.error("Error starting recording:", error);
       addDebugMessage(`Failed to start recording: ${error}`);
