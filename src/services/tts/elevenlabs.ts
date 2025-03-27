@@ -1,25 +1,28 @@
 import { TTSService } from "../../types/providers/tts";
 import WebSocket from "ws";
 import eventBus from "../../engine";
+import { TelephonyProvider } from "../../types/providers/telephony";
 
 export class ElevenLabsTTSService implements TTSService {
   private ws: WebSocket | null = null;
-  private isInitialized = false;
   private voiceId: string;
   private apiKey: string;
   private listenerCallback: ((data: Buffer) => void) | null = null;
   private id: string;
   private language: string;
   private model: string;
+  private telephonyProvider: TelephonyProvider | null = null;
 
   constructor(
     id: string,
     language: string = "en-US",
-    model: string = "eleven_multilingual_v2"
+    model: string = "eleven_multilingual_v2",
+    telephonyProvider: TelephonyProvider | null = null
   ) {
     this.id = id;
     this.language = language;
     this.model = model;
+    this.telephonyProvider = telephonyProvider;
     this.voiceId =
       this.language === "hi" ? "Sxk6njaoa7XLsAFT7WcN" : "JBFqnCBsd6RMkjVDRZzb";
     this.apiKey = process.env.ELEVENLABS_API_KEY || "";
@@ -30,7 +33,6 @@ export class ElevenLabsTTSService implements TTSService {
       throw new Error("ElevenLabs API key not found");
     }
     await this.connectWebSocket();
-    this.isInitialized = true;
     console.log("🎙️ ElevenLabs TTS: Connected");
   }
 
@@ -92,14 +94,25 @@ export class ElevenLabsTTSService implements TTSService {
       });
 
       this.ws.on("close", () => {
-        console.log("WebSocket connection closed");
-        setTimeout(() => this.connectWebSocket(), 10);
+        console.log("ElevenLabs WebSocket connection closed");
+
+        if (
+          this.telephonyProvider &&
+          (this.telephonyProvider as any).ws?.readyState === WebSocket.OPEN 
+        ) {
+          console.log(
+            "Telephony connection active, attempting TTS reconnection"
+          );
+          setTimeout(() => this.connectWebSocket(), 10);
+        } else {
+          console.log("Telephony connection closed, not reconnecting TTS");
+        }
       });
     });
   }
 
   async generate(text: string): Promise<string> {
-    if (!this.isInitialized || !this.ws) {
+    if ( !this.ws) {
       await this.initialize();
     }
 
@@ -128,7 +141,6 @@ export class ElevenLabsTTSService implements TTSService {
       this.ws.close();
       // this.ws = null;
     }
-    this.isInitialized = false;
   }
 
   public onChunk(listenerCallback: (data: Buffer) => void): void {
