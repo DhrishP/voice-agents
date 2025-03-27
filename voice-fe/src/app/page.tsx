@@ -1,13 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import useInducedCall from "@/hooks/useInducedCall";
+import { useInducedVoice, CallState } from "@/hooks/useInducedVoice";
 import React from "react";
 import UseWindow from "@/hooks/usewindow";
 
-export default function HomePage() {
-  const [callId, setCallId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+export default function VoiceDemoPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string[]>([]);
@@ -15,23 +13,18 @@ export default function HomePage() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
-  const audioQueueRef = useRef<string[]>([]);
-  const isPlayingRef = useRef<boolean>(false);
   const audioSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const window = UseWindow();
+
   const addDebugMessage = useCallback((message: string) => {
     setDebugInfo((prev) => [message, ...prev].slice(0, 20));
     console.log("Debug:", message);
   }, []);
 
-  const { callActive, callDuration, transcript, hangup, pipe, events } =
-    useInducedCall(callId || "", {
-      onError: (err) => {
-        setError(err.message);
-        addDebugMessage(`Error: ${err.message}`);
-      },
-    });
+  const { callState, callDuration, hangup, pipe, on, startCall, isLoading } =
+    useInducedVoice();
 
+  // Initialize audio context
   useEffect(() => {
     const win = typeof window !== "undefined" ? window : null;
     if (win && !audioContextRef.current) {
@@ -54,8 +47,9 @@ export default function HomePage() {
     };
   }, []);
 
+  // Handle audio output
   useEffect(() => {
-    if (callActive && events) {
+    if (callState === CallState.CONNECTED) {
       addDebugMessage("Setting up audio output handler");
 
       const handleAudioChunk = async (audioData: string) => {
@@ -110,13 +104,10 @@ export default function HomePage() {
           });
           audioSourcesRef.current = [];
         }
-
-        audioQueueRef.current = [];
-        isPlayingRef.current = false;
       };
 
-      const unsubscribeAudio = events.on("audio.out", handleAudioChunk);
-      const unsubscribeCancel = events.on("call.audio.cancelled", handleCancel);
+      const unsubscribeAudio = on("audio.out", handleAudioChunk);
+      const unsubscribeCancel = on("call.audio.cancelled", handleCancel);
 
       return () => {
         unsubscribeAudio();
@@ -135,10 +126,10 @@ export default function HomePage() {
         }
       };
     }
-  }, [callActive, events, addDebugMessage]);
+  }, [callState, on, addDebugMessage]);
 
   const startRecording = async () => {
-    if (!callActive) {
+    if (callState !== CallState.CONNECTED) {
       addDebugMessage("Cannot start recording - call not active");
       return;
     }
@@ -165,7 +156,6 @@ export default function HomePage() {
       });
 
       const source = audioContext.createMediaStreamSource(stream);
-
       const processor = audioContext.createScriptProcessor(2048, 1, 1);
       processorRef.current = processor;
 
@@ -201,39 +191,24 @@ export default function HomePage() {
     addDebugMessage("Recording stopped");
   };
 
-  const createCall = useCallback(async () => {
+  const createNewCall = useCallback(async () => {
     try {
-      setIsLoading(true);
       setError(null);
       addDebugMessage("Creating new call...");
       audioChunksRef.current = 0;
 
-      const response = await fetch("/api/websocket/calls", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          prompt:
-            "You are a helpful voice assistant. Keep your responses concise and clear. Answer the user's questions helpfully.",
-        }),
+      await startCall({
+        prompt:
+          "You are a helpful voice assistant. Keep your responses concise and clear. Answer the user's questions helpfully.",
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to create call");
-      }
-
-      const data = await response.json();
-      setCallId(data.callId);
-      addDebugMessage(`Call created with ID: ${data.callId}`);
+      addDebugMessage("Call created successfully");
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : "An error occurred";
       setError(errorMsg);
       addDebugMessage(`Error creating call: ${errorMsg}`);
-    } finally {
-      setIsLoading(false);
     }
-  }, [addDebugMessage]);
+  }, [startCall, addDebugMessage]);
 
   const playTestTone = async () => {
     try {
@@ -292,7 +267,7 @@ export default function HomePage() {
   return (
     <main className="min-h-screen p-8">
       <div className="max-w-2xl mx-auto space-y-6">
-        <h1 className="text-3xl font-bold mb-8">Voice AI Demo</h1>
+        <h1 className="text-3xl font-bold mb-8">Voice AI SDK Demo</h1>
 
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
@@ -300,10 +275,10 @@ export default function HomePage() {
           </div>
         )}
 
-        {!callActive ? (
+        {callState === CallState.IDLE || callState === CallState.ENDED ? (
           <div className="space-y-4">
             <button
-              onClick={createCall}
+              onClick={createNewCall}
               disabled={isLoading}
               className="bg-blue-500 text-white px-4 py-2 rounded disabled:bg-blue-300"
             >
@@ -324,6 +299,7 @@ export default function HomePage() {
                 Call Duration: {Math.floor(callDuration / 60)}:
                 {String(callDuration % 60).padStart(2, "0")}
               </div>
+              <div className="text-sm text-gray-500">State: {callState}</div>
               <button
                 onClick={hangup}
                 className="bg-red-500 text-white px-4 py-2 rounded"
@@ -348,6 +324,7 @@ export default function HomePage() {
                     ? "bg-red-500 text-white"
                     : "bg-green-500 text-white"
                 }`}
+                disabled={callState !== CallState.CONNECTED}
               >
                 {isRecording ? "Stop Speaking" : "Start Speaking"}
               </button>
@@ -357,24 +334,8 @@ export default function HomePage() {
                     ● Recording
                   </span>
                 )}
-                {!isRecording && callActive && (
+                {!isRecording && callState === CallState.CONNECTED && (
                   <span className="text-gray-500">Ready to record</span>
-                )}
-              </div>
-            </div>
-            <div className="mt-6">
-              <h2 className="text-xl font-semibold mb-2">Transcript</h2>
-              <div className="bg-gray-100 p-4 rounded max-h-96 overflow-y-auto">
-                {transcript.length > 0 ? (
-                  transcript.map((text, index) => (
-                    <p key={index} className="mb-2">
-                      {text}
-                    </p>
-                  ))
-                ) : (
-                  <p className="text-gray-500 italic">
-                    No transcript available yet. Try speaking.
-                  </p>
                 )}
               </div>
             </div>
