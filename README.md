@@ -199,6 +199,3 @@ cd voice-fe
 npm run dev
 ```
 
-## License
-
-MIT

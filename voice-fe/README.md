@@ -149,6 +149,3 @@ The `pipe` function expects audio data in the following format:
 - 8000Hz sample rate
 - Single channel (mono)
 
-## License
-
-MIT

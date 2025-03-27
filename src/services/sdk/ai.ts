@@ -158,11 +158,11 @@ export class SDKServices {
               data: {
                 callId: callId,
                 type: TranscriptType.TOOL,
-                transcript: text,
+                transcript: toolResults[0].args.reason,
               },
             });
             history.push({
-              role: "assistant",
+              role: "data",
               content: `[${toolResults[0].toolName}] : ${toolResults[0].args.reason}`,
             });
           } else {
