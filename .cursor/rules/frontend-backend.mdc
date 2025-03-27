@@ -1,0 +1,20 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+a sample Next.js application has been set up which uses the useInducedCall hook. On the homepage, add a simple button that, when clicked, performs the following actions:
+
+Calls an API to create a new call.
+
+Retrieves the call ID from the API response and initializes the useInducedCall hook.
+
+Extracts the relevant states, including callDuration, transcript, and callActive, to track the call's status, duration, and live transcription.
+
+Accesses functions such as hangup to end the call and pipe to handle audio from the frontend.
+
+Listens for events like "audio.out", "call.started", and "call.ended" to manage the call lifecycle.
+
+Displays a basic phone call UI that shows the call status, duration, transcript, and interactive controls for managing the call.
+
+make these considerations before doing changes in the nextjs project at voice-fe folder
