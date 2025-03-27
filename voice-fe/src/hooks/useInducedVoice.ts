@@ -39,13 +39,13 @@ async function createCall(options?: CreateCallOptions) {
         prompt:
           options?.prompt ||
           "You are a helpful voice assistant. Keep your responses concise and clear. Answer the user's questions helpfully.",
-        sttProvider: "deepgram",
-        ttsProvider: "elevenlabs",
-        llmProvider: "openai",
-        llmModel: "gpt-4",
-        sttModel: "nova-2",
-        ttsModel: "eleven_multilingual_v2",
-        language: "en-US",
+        sttProvider: options?.sttProvider || "deepgram",
+        ttsProvider: options?.ttsProvider || "elevenlabs",
+        llmProvider: options?.llmProvider || "openai",
+        llmModel: options?.llmModel || "gpt-4",
+        sttModel: options?.sttModel || "nova-2",
+        ttsModel: options?.ttsModel || "eleven_multilingual_v2",
+        language: options?.language || "en-US",
       }),
     });
 
