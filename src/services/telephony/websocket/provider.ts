@@ -2,6 +2,7 @@ import WebSocket from "ws";
 import { TelephonyProvider } from "../../../types/providers/telephony";
 import eventBus from "../../../engine";
 import { VoiceCallJobData, AudioChunkData } from "../../../types/voice-call";
+import { engineError, callEnded } from "../../../utils/emit-functions";
 const alawmulaw = require("alawmulaw");
 
 interface AudioChunk {
@@ -104,10 +105,7 @@ export class WebSocketProvider implements TelephonyProvider {
 
     this.ws.on("error", (error) => {
       console.error(`[${this.id}] WebSocket error:`, error);
-      eventBus.emit("call.error", {
-        ctx: { callId: this.id },
-        error,
-      });
+      engineError(this.id, error);
     });
 
     this.ws.on("close", () => {
@@ -116,11 +114,8 @@ export class WebSocketProvider implements TelephonyProvider {
         this.ws?.readyState
       );
       this.ws = null;
-      eventBus.emit("call.ended", {
-        ctx: { callId: this.id },
-        data: {
-          errorReason: "WebSocket connection closed",
-        },
+      callEnded(this.id, {
+        errorReason: "WebSocket connection closed",
       });
     });
   }

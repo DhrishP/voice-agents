@@ -7,10 +7,9 @@ const wss = new WebSocket.Server({ server });
 import operator from "../../services/telephony/plivo/operator";
 import Server from "../../types/server";
 import ngrok from "ngrok";
-import eventBus from "../../events";
 import prisma from "../../db/client";
 import recordingService from "../../services/recording";
-
+import { callEnded, engineError } from "../../utils/emit-functions";
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -33,13 +32,9 @@ app.post("/plivo/stream-events/:callId", (req, res) => {
 
   console.log(`Stream event for call ${callId}:`, event);
 
-  // Handle various stream events (start, stop, etc.)
   if (event.event === "streamStopped") {
-    eventBus.emit("call.ended", {
-      ctx: { callId },
-      data: {
-        errorReason: "Stream stopped",
-      },
+    callEnded(callId, {
+      errorReason: "Stream stopped",
     });
   }
 
@@ -183,10 +178,7 @@ wss.on("connection", (ws, req) => {
   ws.on("error", (error) => {
     console.error(`Plivo WebSocket error for call ${callId}:`, error);
     try {
-      eventBus.emit("call.error", {
-        ctx: { callId },
-        error,
-      });
+      engineError(callId, error);
     } catch (emitError) {
       console.error(
         `Error emitting error event for call ${callId}:`,
@@ -207,11 +199,8 @@ wss.on("connection", (ws, req) => {
     }
 
     try {
-      eventBus.emit("call.ended", {
-        ctx: { callId },
-        data: {
-          errorReason: "WebSocket connection closed",
-        },
+      callEnded(callId, {
+        errorReason: "WebSocket connection closed",
       });
     } catch (emitError) {
       console.error(

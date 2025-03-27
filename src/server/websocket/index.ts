@@ -7,6 +7,7 @@ import operator from "../../services/telephony/websocket/operator";
 import eventBus from "../../events";
 import { queue } from "../worker";
 import prisma from "../../db/client";
+import { engineError } from "../../utils/emit-functions";
 
 const app = express();
 const server = new HttpServer(app);
@@ -121,10 +122,7 @@ wss.on("connection", async (ws, req) => {
 
   ws.on("error", (error) => {
     console.error(`WebSocket error for session ${callId}:`, error);
-    eventBus.emit("call.error", {
-      ctx: { callId },
-      error,
-    });
+    engineError(callId, error);
   });
 
   ws.on("close", () => {

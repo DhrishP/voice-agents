@@ -6,7 +6,7 @@ import { twilioConfig } from "../config/twilio";
 import TwilioServer from "./twilio";
 import PlivoServer from "./plivo";
 import { plivoConfig } from "../config/plivo";
-import WebSocketServer from "./websocket"; 
+import WebSocketServer from "./websocket";
 import { websocketConfig } from "../config/websocket";
 
 async function initialize() {

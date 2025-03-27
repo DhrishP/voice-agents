@@ -5,7 +5,7 @@ import { VoiceCallJobData } from "../../../types/voice-call";
 import { Client } from "plivo";
 import DTMFService from "../../dtmf";
 import { DTMFTone } from "../../../types/dtmf";
-
+import { callEnded } from "../../../utils/emit-functions";
 export class PlivoProvider implements TelephonyProvider {
   private ws: WebSocket | null = null;
   private listenerCallback: ((chunk: string) => void) | null = null;
@@ -125,11 +125,8 @@ export class PlivoProvider implements TelephonyProvider {
       console.log("Plivo WebSocket connection closed");
       this.ws = null;
 
-      eventBus.emit("call.ended", {
-        ctx: { callId: this.id },
-        data: {
-          errorReason: "WebSocket connection closed",
-        },
+      callEnded(this.id, {
+        errorReason: "WebSocket connection closed",
       });
     });
 

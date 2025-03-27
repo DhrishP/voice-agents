@@ -18,6 +18,7 @@ import recordingService from "../services/recording";
 import usageTrackingService from "../services/usage";
 import plivoOperator from "../services/telephony/plivo/operator";
 import websocketOperator from "../services/telephony/websocket/operator";
+import { callEnded } from "../utils/emit-functions";
 const sttEngines: Record<string, STTService> = {};
 const ttsEngines: Record<string, TTSService> = {};
 const telephonyEngines: Record<string, TelephonyProvider> = {};
@@ -160,7 +161,8 @@ class PhoneCall {
       const ttsEngine = new ElevenLabsTTSService(
         this.id,
         this.payload.language || "en-US",
-        this.payload.ttsModel
+        this.payload.ttsModel,
+        this.telephonyEngine
       );
       await ttsEngine.initialize();
 
@@ -288,7 +290,6 @@ eventBus.on("call.response.chunk.generated", async (event) => {
 eventBus.on("call.audio.chunk.synthesized", async (event) => {
   const { ctx, data } = event;
   const engine = telephonyEngines[ctx.callId];
-  const sttEngine = sttEngines[ctx.callId];
 
   usageTrackingService.updateActivity(ctx.callId);
   usageTrackingService.trackAudioActivity(ctx.callId);
@@ -360,16 +361,20 @@ eventBus.on("call.hangup.requested", async (event) => {
         text: `Goodbye.`,
       },
     });
+    await prisma.transcript.create({
+      data: {
+        transcript: `goodbye`,
+        type: "ASSISTANT",
+        callId: ctx.callId,
+      },
+    });
 
     setTimeout(async () => {
       try {
         await telephonyEngine.hangup();
 
-        eventBus.emit("call.ended", {
-          ctx: { callId: ctx.callId },
-          data: {
-            errorReason: `Call ended by AI: ${data.reason}`,
-          },
+        callEnded(ctx.callId, {
+          errorReason: `Call ended by AI: ${data.reason}`,
         });
       } catch (error) {
         console.error(`Error hanging up call ${ctx.callId}:`, error);
@@ -382,6 +387,11 @@ eventBus.on("call.hangup.requested", async (event) => {
 
 eventBus.on("call.error", async (event) => {
   const { ctx, error } = event;
+  const telephonyEngine = telephonyEngines[ctx.callId];
+
+  if (telephonyEngine) {
+    await telephonyEngine.hangup();
+  }
 
   try {
     await prisma.call.update({
@@ -429,11 +439,8 @@ eventBus.on("call.transfer.requested", async (event) => {
         });
 
         // Emit call ended event after transfer is complete
-        eventBus.emit("call.ended", {
-          ctx: { callId: ctx.callId },
-          data: {
-            errorReason: `Call transferred to human: ${data.reason}`,
-          },
+        callEnded(ctx.callId, {
+          errorReason: `Call transferred to human: ${data.reason}`,
         });
       } catch (error) {
         console.error(`Error transferring call ${ctx.callId}:`, error);
@@ -447,11 +454,9 @@ eventBus.on("call.transfer.requested", async (event) => {
 eventBus.on("call.speech.detected", async (event) => {
   const { ctx, data } = event;
   const phoneCall = telephonyEngines[ctx.callId];
-  const ttsEngine = ttsEngines[ctx.callId];
   console.log("call.speech.detected", data.transcription);
 
   if (!phoneCall) return;
-  console.log("here");
   try {
     await phoneCall.cancel();
   } catch (error) {
@@ -481,7 +486,5 @@ eventBus.on("call.dtmf.tone.generated", async (event) => {
     );
   }
 });
-
-
 
 export default eventBus;

@@ -7,8 +7,7 @@ const wss = new WebSocket.Server({ server });
 import operator from "../../services/telephony/twillio/operator";
 import Server from "../../types/server";
 import ngrok from "ngrok";
-import eventBus from "../../events";
-
+import { callEnded, engineError } from "../../utils/emit-functions";
 app.use(express.json());
 
 // Endpoint to get TwiML for a call
@@ -39,10 +38,7 @@ wss.on("connection", (ws, req) => {
 
   ws.on("error", (error) => {
     console.error(`WebSocket error for call ${callId}:`, error);
-    eventBus.emit("call.error", {
-      ctx: { callId },
-      error,
-    });
+    engineError(callId, error);
   });
 
   ws.on("close", () => {
@@ -50,11 +46,8 @@ wss.on("connection", (ws, req) => {
     operator.hangup(callId).catch((error: any) => {
       console.error(`Error hanging up call ${callId}:`, error);
     });
-    eventBus.emit("call.ended", {
-      ctx: { callId },
-      data: {
-        errorReason: "Call ended",
-      },
+    callEnded(callId, {
+      errorReason: "WebSocket connection closed",
     });
   });
 });
