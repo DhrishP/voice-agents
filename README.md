@@ -1,152 +1,203 @@
-# Voice Agent
+# InducedAI Voice Platform
 
-A framework for processing voice calls using BullMQ queues, workers, and Twilio integration.
+A comprehensive platform for building AI-powered voice applications, featuring both a robust backend voice processing engine and a WebSocket-based frontend demo.
+
+## Overview
+
+The platform consists of two main components:
+
+1. **Backend Voice Agent** (`/src`): A framework for processing voice calls using BullMQ queues, workers, and multiple telephony providers
+2. **Frontend Demo** (`/voice-fe`): A WebSocket-based demo application showcasing real-time voice communication with AI agents
 
 ## Features
 
-- BullMQ queue for processing voice call requests
-- Worker for handling voice call jobs
-- Zod schema validation for request data
-- Redis-backed job queue for reliability and persistence
-- Unified Twilio service for seamless call management
-- WebSocket support for real-time audio streaming
+### Backend Features
+
+- Multiple telephony provider support:
+  - Twilio integration for traditional phone calls
+  - WebSocket provider for browser-based communication
+- BullMQ queue system for reliable job processing
+- Redis-backed persistence
+- Modular architecture with provider abstraction
+- Real-time audio streaming and processing
+- Configurable AI service integrations:
+  - Speech-to-Text (Deepgram)
+  - Text-to-Speech (ElevenLabs)
+  - Language Models (OpenAI)
+
+### Frontend Features
+
+- Real-time voice communication via WebSocket
+- Call state management and duration tracking
+- Event-based architecture
+- Configurable AI providers and models
+- TypeScript support with full type definitions
+- Modern React hooks for easy integration
 
 ## Prerequisites
 
-- Node.js (v16 or higher)
+- Node.js (v18 or higher)
 - Redis server
-- Twilio account with API credentials
-
-## Installation
-
-```bash
-# Install dependencies
-yarn install
-
-# Build the project
-yarn build
-```
-
-## Configuration
-
-Create a `.env` file in the root directory with the following variables:
-
-```
-# Redis Configuration
-REDIS_HOST=localhost
-REDIS_PORT=6379
-# REDIS_PASSWORD=
-
-# Voice Agent Configuration
-VOICE_AGENT_CONCURRENCY=5
-
-# Twilio Configuration
-TWILIO_ACCOUNT_SID=your_account_sid
-TWILIO_AUTH_TOKEN=your_auth_token
-SERVER_URL=https://your-server-url.com
-TWILIO_SERVER_PORT=3000
-```
-
-## Usage
-
-### Starting the Voice Agent
-
-```bash
-# Start the voice agent
-yarn start
-```
-
-### Development Mode
-
-```bash
-# Run in development mode with hot reloading
-yarn dev
-```
-
-### API
-
-The Voice Agent provides a simple API for creating and managing voice calls:
-
-```typescript
-import { TelephonyProvider } from "./providers/telephony";
-import { VoiceCallRequest } from "./types/voice-call";
-
-// Get telephony provider instance
-const telephonyProvider = TelephonyProvider.getInstance();
-await telephonyProvider.initialize();
-
-// Create a voice call
-const request: VoiceCallRequest = {
-  fromNumber: "+15551234567",
-  toNumber: "+15557654321",
-  prompt: "Hello, this is a test voice call from our automated system.",
-  provider: "twilio",
-  outputSchema: {
-    callStatus: "string",
-    callDuration: "number",
-    userResponse: "string",
-  },
-};
-
-// Make the call
-const jobId = await telephonyProvider.makeCall(request);
-console.log(`Voice call job created with ID: ${jobId}`);
-
-// Get the call ID from the job ID
-const callId = await telephonyProvider.getCallIdFromJobId(jobId);
-
-// Send a message to the call
-await telephonyProvider.send(callId, "How can I help you today?");
-
-// Listen for speech from the call
-telephonyProvider.onListen(callId, (speechChunk) => {
-  console.log(`Received speech: ${speechChunk}`);
-});
-
-// Hang up the call when done
-await telephonyProvider.hangup(callId);
-
-// Shutdown the telephony provider when done
-await telephonyProvider.shutdown();
-```
-
-## Twilio Service
-
-The Voice Agent includes a unified Twilio service that provides a clean interface for managing calls:
-
-```typescript
-import twilioService from "./services/twillio/twilio-service";
-
-// Make a call
-const { callId, callSid } = await twilioService.makeCall(
-  "+15551234567",
-  "+15557654321",
-  "Hello, this is a test call"
-);
-
-// Send audio to a call
-await twilioService.sendAudio(callId, "How are you today?");
-
-// Listen for speech from the call
-twilioService.registerListener(callId, (text) => {
-  console.log(`User said: ${text}`);
-});
-
-// Get call status
-const status = twilioService.getCallStatus(callId);
-
-// Hang up a call
-await twilioService.hangupCall(callId);
-```
+- Twilio account (optional, for phone call support)
+- AI service provider accounts:
+  - OpenAI API key
+  - ElevenLabs API key
+  - Deepgram API key
 
 ## Project Structure
 
-- `src/providers`: Contains the TelephonyProvider class
-- `src/services/twillio`: Contains the unified Twilio service
-- `src/services/queue`: Contains the BullMQ queue and worker implementations
-- `src/services/server`: Contains the Express server for Twilio webhooks
-- `src/types`: Contains TypeScript types and Zod schemas
-- `src/index.ts`: Main entry point
+```
+/
+├── src/                    # Backend voice agent
+│   ├── config/            # Configuration management
+│   ├── engine/            # Core voice processing engine
+│   ├── lib/              # Shared utilities and helpers
+│   ├── server/           # HTTP and WebSocket servers
+│   ├── services/         # Service integrations
+│   ├── types/            # TypeScript types and schemas
+│   └── utils/            # Utility functions
+│
+└── voice-fe/             # Frontend WebSocket demo
+    ├── src/
+    │   ├── app/         # Next.js pages and components
+    │   ├── hooks/       # React hooks including useInducedVoice
+    │   └── components/  # Reusable UI components
+    └── public/          # Static assets
+```
+
+## Getting Started
+
+### Backend Setup
+
+1. Install dependencies:
+
+   ```bash
+   cd src
+   yarn install
+   ```
+
+2. Create a `.env` file in the root directory:
+
+   ```
+   # Redis Configuration
+   REDIS_HOST=localhost
+   REDIS_PORT=6379
+
+   # Voice Agent Configuration
+   VOICE_AGENT_CONCURRENCY=5
+
+   # AI Service Providers
+   OPENAI_API_KEY=your_openai_key
+   ELEVENLABS_API_KEY=your_elevenlabs_key
+   DEEPGRAM_API_KEY=your_deepgram_key
+
+   # Optional Twilio Configuration
+   TWILIO_ACCOUNT_SID=your_account_sid
+   TWILIO_AUTH_TOKEN=your_auth_token
+   SERVER_URL=https://your-server-url.com
+   ```
+
+3. Start the backend:
+   ```bash
+   yarn dev
+   ```
+
+### Frontend Setup
+
+1. Install dependencies:
+
+   ```bash
+   cd voice-fe
+   npm install
+   ```
+
+2. Create a `.env.local` file:
+
+   ```
+   NEXT_PUBLIC_BACKEND_URL=http://localhost:3033
+   NEXT_PUBLIC_BACKEND_WS_URL=ws://localhost:3033
+   ```
+
+3. Start the frontend:
+
+   ```bash
+   npm run dev
+   ```
+
+4. Open [http://localhost:3000](http://localhost:3000) in your browser
+
+## Usage
+
+### Backend API
+
+```typescript
+import { TelephonyProvider } from "./providers/telephony";
+
+// Initialize provider
+const provider = TelephonyProvider.getInstance();
+await provider.initialize();
+
+// Create a voice call
+const request = {
+  fromNumber: "+15551234567",
+  toNumber: "+15557654321",
+  prompt: "You are a helpful AI assistant",
+  provider: "twilio", // or "websocket"
+};
+
+const jobId = await provider.makeCall(request);
+```
+
+### Frontend Hook
+
+```typescript
+import { useInducedVoice } from "@/hooks/useInducedVoice";
+
+function VoiceComponent() {
+  const { callState, callDuration, hangup, pipe, on, startCall, isLoading } =
+    useInducedVoice();
+
+  // Start a call
+  await startCall({
+    prompt: "You are a helpful assistant",
+    language: "en-US",
+  });
+
+  // Handle incoming audio
+  on("audio.out", (audioData) => {
+    // Process base64 encoded L16 PCM audio
+    playAudio(audioData);
+  });
+
+  // Send audio data
+  pipe(base64AudioData);
+}
+```
+
+## Audio Format Specification
+
+The platform expects audio in the following format:
+
+- Encoding: Base64
+- Format: L16 PCM
+- Sample Rate: 8000Hz
+- Channels: 1 (mono)
+
+## Development
+
+### Backend Development
+
+```bash
+cd src
+yarn dev
+```
+
+### Frontend Development
+
+```bash
+cd voice-fe
+npm run dev
+```
 
 ## License
 

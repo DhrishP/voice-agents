@@ -6,8 +6,10 @@ This is a demonstration of the WebSocket-based telephony provider for InducedAI'
 
 - Real-time voice communication with an AI agent
 - Audio recording and playback directly in the browser
-- Transcript display of the conversation
-- Simple UI for call control
+- Call state management and duration tracking
+- Event-based architecture for handling audio and call events
+- Configurable AI providers and models
+- TypeScript support with full type definitions
 
 ## Getting Started
 
@@ -29,10 +31,11 @@ This is a demonstration of the WebSocket-based telephony provider for InducedAI'
    Create a `.env.local` file with:
 
    ```
-   BACKEND_API_URL=http://localhost:3000
+   NEXT_PUBLIC_BACKEND_URL=http://localhost:3033
+   NEXT_PUBLIC_BACKEND_WS_URL=ws://localhost:3033
    ```
 
-   Adjust the URL to match your backend server.
+   Adjust the URLs to match your backend server.
 
 4. Start the development server:
 
@@ -40,46 +43,111 @@ This is a demonstration of the WebSocket-based telephony provider for InducedAI'
    npm run dev
    ```
 
-5. Open [http://localhost:3001](http://localhost:3001) in your browser to see the application.
+5. Open [http://localhost:3000](http://localhost:3000) in your browser to see the application.
 
 ## How It Works
 
-1. The frontend makes a request to the backend to create a new voice call session
-2. The backend creates a call and returns a unique call ID
-3. The frontend connects to the backend via a WebSocket using this call ID
+1. The frontend initiates a call using the `useInducedVoice` hook
+2. The backend creates a call session and returns a unique call ID
+3. A WebSocket connection is automatically established using this call ID
 4. Audio is streamed bidirectionally between the browser and the AI voice agent
 5. The AI agent processes the audio, generates responses, and sends them back to the browser
 
-## Usage
-
-1. Click the "Create New Call" button to initiate a voice call session
-2. Once the call is active, click "Start Speaking" to begin recording audio
-3. Speak into your microphone to communicate with the AI agent
-4. The AI agent will respond with audio played through your speakers
-5. The transcript of the conversation will appear in real-time
-6. Click "Stop Speaking" when you're done speaking
-7. Click "Hang Up" to end the call
-
 ## Hook API
 
-### useInducedCall
+### useInducedVoice
 
-```tsx
+The main hook for managing voice calls with the AI assistant.
+
+```typescript
 const {
-  callActive, // boolean - whether the call is currently active
+  callState, // CallState - current state of the call (IDLE, CONNECTING, CONNECTED, etc.)
   callDuration, // number - duration of the call in seconds
-  transcript, // string[] - array of transcript segments
-  hangup, // function - call to hang up
-  pipe, // function(audioData: string) - send audio data to the AI
-  events, // object with 'on' method to listen for events
-} = useInducedCall(callId);
+  hangup, // () => void - function to end the call
+  pipe, // (data: string) => boolean - send audio data to the AI
+  on, // (event: EventType, callback: (data: any) => void) => () => void
+  startCall, // (options?: CreateCallOptions) => Promise<void>
+  isLoading, // boolean - whether a call is being initiated
+} = useInducedVoice();
 ```
 
-Events:
+#### Call States
 
-- 'audio.out' - Received when audio is sent from the AI
-- 'call.started' - Received when the call is connected
-- 'call.ended' - Received when the call ends
+```typescript
+enum CallState {
+  IDLE = "idle", // Initial state before any call
+  CONNECTING = "connecting", // Call is being established
+  CONNECTED = "connected", // Call is active
+  ENDED = "ended", // Call has been terminated
+  ERROR = "error", // An error occurred
+}
+```
+
+#### Events
+
+```typescript
+type EventType =
+  | "audio.out" // Emitted when audio is received from the server
+  | "call.started" // Emitted when a call begins
+  | "call.ended" // Emitted when a call ends
+  | "error" // Emitted when an error occurs
+  | "call.audio.cancelled"; // Emitted when audio playback is cancelled
+```
+
+#### Usage Example
+
+```typescript
+const { callState, callDuration, hangup, pipe, on, startCall, isLoading } =
+  useInducedVoice();
+
+// Start a call with custom configuration
+await startCall({
+  prompt: "You are a helpful assistant",
+  language: "en-US",
+  ttsModel: "eleven_multilingual_v2",
+});
+
+// Listen for incoming audio
+on("audio.out", (audioData) => {
+  // audioData is base64 encoded L16 PCM audio
+  playAudio(audioData);
+});
+
+// Send audio data from microphone
+const success = pipe(base64AudioData); // base64 encoded L16 PCM audio
+if (!success) {
+  console.error("Failed to send audio data");
+}
+
+// End the call when done
+hangup();
+```
+
+#### Configuration Options
+
+When starting a call, you can provide various options:
+
+```typescript
+interface CreateCallOptions {
+  prompt?: string; // Initial prompt for the AI assistant
+  sttProvider?: string; // Speech-to-text provider (default: "deepgram")
+  ttsProvider?: string; // Text-to-speech provider (default: "elevenlabs")
+  llmProvider?: string; // Language model provider (default: "openai")
+  llmModel?: string; // Language model to use (default: "gpt-4")
+  sttModel?: string; // Speech-to-text model (default: "nova-2")
+  ttsModel?: string; // Text-to-speech model (default: "eleven_multilingual_v2")
+  language?: string; // Language code (default: "en-US")
+}
+```
+
+## Audio Format
+
+The `pipe` function expects audio data in the following format:
+
+- Base64 encoded
+- L16 PCM audio
+- 8000Hz sample rate
+- Single channel (mono)
 
 ## License
 
