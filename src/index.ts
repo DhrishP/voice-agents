@@ -1,6 +1,9 @@
 import "dotenv/config";
 import initialize from "./server";
 import { validateEnv } from "./utils/env-validator";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 try {
   validateEnv();
