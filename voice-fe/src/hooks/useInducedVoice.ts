@@ -1,31 +1,64 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 
+/**
+ * Represents the possible states of a voice call.
+ */
 export enum CallState {
+  /** Initial state before any call is made */
   IDLE = "idle",
+  /** Call is being established */
   CONNECTING = "connecting",
+  /** Call is active and connected */
   CONNECTED = "connected",
+  /** Call has been terminated */
   ENDED = "ended",
+  /** An error occurred during the call */
   ERROR = "error",
 }
 
+/**
+ * Event types that can be listened to during a voice call.
+ */
 export type EventType =
+  /** Emitted when audio data is received from the server */
   | "audio.out"
+  /** Emitted when a call begins */
   | "call.started"
+  /** Emitted when a call ends */
   | "call.ended"
+  /** Emitted when an error occurs */
   | "error"
+  /** Emitted when audio playback is cancelled */
   | "call.audio.cancelled";
 
+/**
+ * Configuration options for creating a new voice call.
+ */
 interface CreateCallOptions {
+  /** Initial prompt/system message for the AI assistant */
   prompt?: string;
+  /** Speech-to-text provider (default: "deepgram") */
   sttProvider?: string;
+  /** Text-to-speech provider (default: "elevenlabs") */
   ttsProvider?: string;
+  /** Language model provider (default: "openai") */
   llmProvider?: string;
+  /** Language model to use (default: "gpt-4") */
   llmModel?: string;
+  /** Speech-to-text model to use (default: "nova-2") */
   sttModel?: string;
+  /** Text-to-speech model to use (default: "eleven_multilingual_v2") */
   ttsModel?: string;
+  /** Language code for speech recognition and synthesis (default: "en-US") */
   language?: string;
 }
 
+/**
+ * Creates a new voice call session with the specified options.
+ * @param options - Configuration options for the call
+ * @returns Promise resolving to the call ID and status
+ * @throws Error if the call creation fails
+ */
 async function createCall(options?: CreateCallOptions) {
   try {
     const baseUrl =
@@ -64,6 +97,42 @@ async function createCall(options?: CreateCallOptions) {
   }
 }
 
+/**
+ * React hook for managing voice calls with an AI assistant.
+ *
+ * @example
+ * ```typescript
+ * const {
+ *   callState,
+ *   callDuration,
+ *   hangup,
+ *   pipe,
+ *   on,
+ *   startCall,
+ *   isLoading
+ * } = useInducedVoice();
+ *
+ * // Start a call with custom options
+ * await startCall({
+ *   prompt: "You are a helpful assistant",
+ *   language: "en-US"
+ * });
+ *
+ * // Listen for audio data
+ * on("audio.out", (audioData) => {
+ *   // Handle audio data (base64 encoded audio)
+ *   playAudio(audioData);
+ * });
+ *
+ * // Send audio data
+ * pipe(base64AudioData);
+ *
+ * // End the call
+ * hangup();
+ * ```
+ *
+ * @returns An object containing call management functions and state
+ */
 export function useInducedVoice() {
   const [callId, setCallId] = useState<string>("");
   const [callState, setCallState] = useState<CallState>(CallState.IDLE);
@@ -77,6 +146,9 @@ export function useInducedVoice() {
     new Map()
   );
 
+  /**
+   * Handles cleanup when a call ends
+   */
   const handleCallEnd = useCallback(() => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -205,6 +277,12 @@ export function useInducedVoice() {
     };
   }, [callId, handleCallEnd]);
 
+  /**
+   * Registers an event listener for voice call events.
+   * @param event - The event type to listen for
+   * @param callback - Function to be called when the event occurs
+   * @returns A cleanup function to remove the event listener
+   */
   const on = useCallback((event: EventType, callback: (data: any) => void) => {
     if (!eventListeners.current.has(event)) {
       eventListeners.current.set(event, new Set());
@@ -218,6 +296,10 @@ export function useInducedVoice() {
     };
   }, []);
 
+  /**
+   * Ends the current voice call.
+   * Sends a termination signal to the server and cleans up resources.
+   */
   const hangup = useCallback(() => {
     if (
       webSocketRef.current &&
@@ -233,6 +315,20 @@ export function useInducedVoice() {
     setCallId("");
   }, [handleCallEnd]);
 
+  /**
+   * Sends audio data to the server.
+   * @param data - Base64 encoded audio data in L16 format (16-bit PCM)
+   * @returns boolean indicating if the data was successfully sent
+   *
+   * @example
+   * ```typescript
+   * // Send audio data from microphone
+   * const success = pipe(base64AudioData);
+   * if (!success) {
+   *   console.error('Failed to send audio data');
+   * }
+   * ```
+   */
   const pipe = useCallback(
     (data: string) => {
       if (!webSocketRef.current) {
@@ -268,6 +364,20 @@ export function useInducedVoice() {
     [callId]
   );
 
+  /**
+   * Initiates a new voice call with the specified options.
+   * @param options - Configuration options for the call
+   * @throws Error if the call creation fails
+   *
+   * @example
+   * ```typescript
+   * await startCall({
+   *   prompt: "You are a helpful assistant",
+   *   language: "en-US",
+   *   ttsModel: "eleven_multilingual_v2"
+   * });
+   * ```
+   */
   const startCall = useCallback(async (options?: CreateCallOptions) => {
     try {
       setIsLoading(true);
@@ -292,12 +402,19 @@ export function useInducedVoice() {
   }, []);
 
   return {
+    /** Current state of the voice call */
     callState,
+    /** Duration of the current call in seconds */
     callDuration,
+    /** Function to end the current call */
     hangup,
+    /** Function to send audio data to the server */
     pipe,
+    /** Function to register event listeners */
     on,
+    /** Function to start a new call */
     startCall,
+    /** Whether a call is currently being initiated */
     isLoading,
   };
 }
