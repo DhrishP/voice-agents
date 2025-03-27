@@ -61,17 +61,6 @@ export class WebSocketProvider implements TelephonyProvider {
         `[${this.id}] WebSocket connection established, current state:`,
         this.ws.readyState
       );
-
-      eventBus.emit("websocket.ready", {
-        ctx: {
-          callId: this.id,
-          provider: "websocket",
-          timestamp: Date.now(),
-        },
-        data: {
-          status: "connected",
-        },
-      });
     } catch (error) {
       console.error(`[${this.id}] Error in setWsObject:`, error);
     }

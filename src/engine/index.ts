@@ -482,22 +482,6 @@ eventBus.on("call.dtmf.tone.generated", async (event) => {
   }
 });
 
-eventBus.on("websocket.ready", async (event) => {
-  const { ctx } = event;
-  console.log(`📱 WebSocket connection ready for call ${ctx.callId}`);
 
-  const sttEngine = sttEngines[ctx.callId];
-  const llmEngine = llmEngines[ctx.callId];
-  const ttsEngine = ttsEngines[ctx.callId];
-  const telephonyEngine = telephonyEngines[ctx.callId];
-
-  console.log(`📊 Current engine status for call ${ctx.callId}:`);
-  console.log(`STT Engine: ${sttEngine ? "✅ Ready" : "❌ Not Ready"}`);
-  console.log(`LLM Engine: ${llmEngine ? "✅ Ready" : "❌ Not Ready"}`);
-  console.log(`TTS Engine: ${ttsEngine ? "✅ Ready" : "❌ Not Ready"}`);
-  console.log(
-    `Telephony Engine: ${telephonyEngine ? "✅ Ready" : "❌ Not Ready"}`
-  );
-});
 
 export default eventBus;
