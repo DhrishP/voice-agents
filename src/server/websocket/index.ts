@@ -30,6 +30,7 @@ app.post("/session", async (req: Request, res: Response) => {
         telephonyProvider: "websocket",
         summary: "",
         language: req.body.language || "en-US",
+        outputSchema: req.body.outputSchema || {},
         provider: {
           create: {
             llmProvider: req.body.llmProvider || "openai",

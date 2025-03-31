@@ -63,6 +63,7 @@ class PhoneCall {
           telephonyProvider: this.payload.telephonyProvider,
           summary: "",
           language: this.payload.language || "en-US",
+          outputSchema: this.payload.outputSchema,
           provider: {
             create: {
               llmProvider: this.payload.llmProvider,

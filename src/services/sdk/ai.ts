@@ -236,10 +236,6 @@ export class SDKServices {
           usage: usage.totalTokens,
         },
       });
-      await prisma.call.update({
-        where: { id: callId },
-        data: { outputSchema: zodSchema.parse(object) },
-      });
       return null;
     }
     await prisma.usage.create({
