@@ -19,6 +19,7 @@ import usageTrackingService from "../services/usage";
 import plivoOperator from "../services/telephony/plivo/operator";
 import websocketOperator from "../services/telephony/websocket/operator";
 import { callEnded } from "../utils/emit-functions";
+import { SDKServices } from "../services/sdk/ai";
 const sttEngines: Record<string, STTService> = {};
 const ttsEngines: Record<string, TTSService> = {};
 const telephonyEngines: Record<string, TelephonyProvider> = {};
@@ -313,7 +314,6 @@ eventBus.on("call.ended", async (event) => {
   const telephonyEngine = telephonyEngines[ctx.callId];
   const sttEngine = sttEngines[ctx.callId];
   const ttsEngine = ttsEngines[ctx.callId];
-
   await recordingService.finishRecording(ctx.callId);
 
   await usageTrackingService.saveUsageMetrics(ctx.callId);
@@ -329,6 +329,14 @@ eventBus.on("call.ended", async (event) => {
     await ttsEngine.close();
   }
 
+  const call = await prisma.call.findUnique({
+    where: { id: ctx.callId },
+    include: {
+      provider: true,
+      transcripts: true,
+    },
+  });
+
   try {
     await prisma.call.update({
       where: { id: ctx.callId },
@@ -336,6 +344,46 @@ eventBus.on("call.ended", async (event) => {
         status: "COMPLETED",
       },
     });
+    const outputSchema = JSON.parse(call?.outputSchema as string);
+
+    const transcription = call?.transcripts.map((transcript) => {
+      const role =
+        transcript.type === "USER"
+          ? ("user" as const)
+          : transcript.type === "ASSISTANT"
+          ? ("assistant" as const)
+          : transcript.type === "TOOL"
+          ? ("data" as const)
+          : ("user" as const);
+      return {
+        role,
+        content: transcript.transcript,
+      };
+    });
+    if (!outputSchema || !transcription) {
+      return;
+    }
+    const sdkService = new SDKServices();
+    const { parsedObject, usage } = await sdkService.generateOutputSchema(
+      ctx.callId,
+      outputSchema,
+      call?.provider?.llmProvider || "",
+      call?.provider?.llmModel || "",
+      transcription
+    );
+    await prisma.usage.create({
+      data: {
+        callId: ctx.callId,
+        type: "LLM",
+        usage: usage.totalTokens,
+      },
+    });
+    if (parsedObject) {
+      await prisma.call.update({
+        where: { id: ctx.callId },
+        data: { outputSchema: parsedObject },
+      });
+    }
   } catch (error) {
     console.error("Failed to update call completion:", error);
   }

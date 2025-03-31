@@ -227,26 +227,9 @@ export class SDKServices {
     });
     const parsedObject = zodSchema.parse(object);
     if (!parsedObject) {
-      await prisma.usage.create({
-        data: {
-          callId: callId,
-          type: "LLM",
-          usage: usage.totalTokens,
-        },
-      });
-      return null;
+      return { parsedObject: null, usage };
     }
-    await prisma.usage.create({
-      data: {
-        callId: callId,
-        type: "LLM",
-        usage: usage.totalTokens,
-      },
-    });
-    await prisma.call.update({
-      where: { id: callId },
-      data: { outputSchema: parsedObject },
-    });
-    return parsedObject;
+
+    return { parsedObject, usage };
   }
 }
