@@ -98,7 +98,9 @@ export class ElevenLabsTTSService implements TTSService {
 
         if (
           this.telephonyProvider &&
-          (this.telephonyProvider as any).ws?.readyState === WebSocket.OPEN 
+          ((this.telephonyProvider as any).ws?.readyState === WebSocket.OPEN ||
+            (this.telephonyProvider as any).ws?.readyState ===
+              WebSocket.CONNECTING)
         ) {
           console.log(
             "Telephony connection active, attempting TTS reconnection"
@@ -112,7 +114,7 @@ export class ElevenLabsTTSService implements TTSService {
   }
 
   async generate(text: string): Promise<string> {
-    if ( !this.ws) {
+    if (!this.ws) {
       await this.initialize();
     }
 
