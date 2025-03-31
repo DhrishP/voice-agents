@@ -32,6 +32,19 @@ export class SDKServices {
     });
   }
 
+  private getProviderModel(provider: string, model: string) {
+    const providerModel =
+      provider === "openai"
+        ? this.openai(model)
+        : provider === "gemini"
+        ? this.google("gemini-2.0-flash-001")
+        : null;
+    if (!providerModel) {
+      throw new Error(`Provider ${provider} not supported`);
+    }
+    return providerModel;
+  }
+
   async generateText(transcription: CoreMessage[]) {
     // future use if any
     const { text } = await generateText({
@@ -55,15 +68,7 @@ export class SDKServices {
     telephonyProvider: "twilio" | "plivo" | "websocket";
   }) {
     try {
-      const providerModel =
-        provider === "openai"
-          ? this.openai(model)
-          : provider === "gemini"
-          ? this.google("gemini-2.0-flash-001")
-          : null;
-      if (!providerModel) {
-        throw new Error(`Provider ${provider} not supported`);
-      }
+      const providerModel = this.getProviderModel(provider, model);
       const { textStream } = await streamText({
         model: providerModel,
         messages: history,
@@ -200,21 +205,14 @@ export class SDKServices {
   }
 
   async generateOutputSchema(
-    transcription: CoreMessage[],
-    outputSchema: Record<string, any>,
     callId: string,
+    outputSchema: Record<string, any>,
     provider: string,
-    model: string
+    model: string,
+    transcription: CoreMessage[]
   ) {
-    const providerModel =
-      provider === "openai"
-        ? this.openai(model)
-        : provider === "gemini"
-        ? this.google("gemini-2.0-flash-001")
-        : null;
-    if (!providerModel) {
-      throw new Error(`Provider ${provider} not supported`);
-    }
+    const providerModel = this.getProviderModel(provider, model);
+
     const zodSchema = z.object(outputSchema);
     const { object, usage } = await generateObject({
       model: providerModel,
