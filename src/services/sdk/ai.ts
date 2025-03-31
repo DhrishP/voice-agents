@@ -1,5 +1,11 @@
 import { openai, OpenAIProvider, createOpenAI } from "@ai-sdk/openai";
-import { CoreMessage, generateText, streamText, tool } from "ai";
+import {
+  CoreMessage,
+  generateObject,
+  generateText,
+  streamText,
+  tool,
+} from "ai";
 import {
   createGoogleGenerativeAI,
   GoogleGenerativeAIProvider,
@@ -191,5 +197,62 @@ export class SDKServices {
       console.error("Error streaming text:", error);
       return { textStream: null };
     }
+  }
+
+  async generateOutputSchema(
+    transcription: CoreMessage[],
+    outputSchema: Record<string, any>,
+    callId: string,
+    provider: string,
+    model: string
+  ) {
+    const providerModel =
+      provider === "openai"
+        ? this.openai(model)
+        : provider === "gemini"
+        ? this.google("gemini-2.0-flash-001")
+        : null;
+    if (!providerModel) {
+      throw new Error(`Provider ${provider} not supported`);
+    }
+    const zodSchema = z.object(outputSchema);
+    const { object, usage } = await generateObject({
+      model: providerModel,
+      schema: zodSchema,
+      messages: [
+        ...transcription,
+        {
+          role: "user",
+          content: `generate a structured output using the call transcription based on the provided history in the given output format`,
+        },
+      ],
+    });
+    const parsedObject = zodSchema.parse(object);
+    if (!parsedObject) {
+      await prisma.usage.create({
+        data: {
+          callId: callId,
+          type: "LLM",
+          usage: usage.totalTokens,
+        },
+      });
+      await prisma.call.update({
+        where: { id: callId },
+        data: { outputSchema: zodSchema.parse(object) },
+      });
+      return null;
+    }
+    await prisma.usage.create({
+      data: {
+        callId: callId,
+        type: "LLM",
+        usage: usage.totalTokens,
+      },
+    });
+    await prisma.call.update({
+      where: { id: callId },
+      data: { outputSchema: parsedObject },
+    });
+    return parsedObject;
   }
 }
