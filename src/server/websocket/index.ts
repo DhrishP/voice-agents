@@ -59,6 +59,7 @@ app.post("/session", async (req: Request, res: Response) => {
       ttsProvider: req.body.ttsProvider || "elevenlabs",
       ttsModel: req.body.ttsModel || "eleven_multilingual_v2",
       language: req.body.language || "en-US",
+      outputSchema: req.body.outputSchema || {},
     });
 
     // Get the base URL from the operator

@@ -6,6 +6,7 @@ import { Client } from "plivo";
 import DTMFService from "../../dtmf";
 import { DTMFTone } from "../../../types/dtmf";
 import { callEnded } from "../../../utils/emit-functions";
+import { z } from "zod";
 export class PlivoProvider implements TelephonyProvider {
   private ws: WebSocket | null = null;
   private listenerCallback: ((chunk: string) => void) | null = null;
@@ -42,6 +43,9 @@ export class PlivoProvider implements TelephonyProvider {
         (number: any) => number.number === payload.fromNumber
       );
 
+      if (typeof payload.outputSchema !== "string") {
+        return false;
+      }
       if (!hasNumber) {
         return false;
       }
