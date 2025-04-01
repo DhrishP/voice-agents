@@ -204,9 +204,9 @@ export class WebSocketProvider implements TelephonyProvider {
       this.inputBuffer = [];
       this.inputBufferSize = 0;
 
-      console.log(
-        `[${this.id}] Processed and sent ${totalSamples} input samples`
-      );
+      // console.log(
+      //   `[${this.id}] Processed and sent ${totalSamples} input samples`
+      // );
     } catch (error) {
       console.error(`[${this.id}] Error processing input buffer:`, error);
     }
@@ -310,16 +310,16 @@ export class WebSocketProvider implements TelephonyProvider {
           })
         );
 
-        console.log(
-          `[${this.id}] Sent combined audio of ${this.audioChunks.length} chunks, ` +
-            `total size: ${wavBuffer.length} bytes, ` +
-            `chunk IDs: ${this.audioChunks.map((c) => c.id).join(", ")}, ` +
-            `total response time: ${
-              this.responseStartTime
-                ? Date.now() - this.responseStartTime
-                : "unknown"
-            }ms`
-        );
+        // console.log(
+        //   `[${this.id}] Sent combined audio of ${this.audioChunks.length} chunks, ` +
+        //     `total size: ${wavBuffer.length} bytes, ` +
+        //     `chunk IDs: ${this.audioChunks.map((c) => c.id).join(", ")}, ` +
+        //     `total response time: ${
+        //       this.responseStartTime
+        //         ? Date.now() - this.responseStartTime
+        //         : "unknown"
+        //     }ms`
+        // );
       }
       this.audioChunks = [];
       this.nextChunkId = 0;
@@ -455,7 +455,7 @@ export class WebSocketProvider implements TelephonyProvider {
         })
       );
 
-      console.log(`[${this.id}] Audio queue cleared and playback cancelled`);
+      // console.log(`[${this.id}] Audio queue cleared and playback cancelled`);
     }
   }
 

@@ -344,7 +344,12 @@ eventBus.on("call.ended", async (event) => {
         status: "COMPLETED",
       },
     });
-    const outputSchema = JSON.parse(call?.outputSchema as string);
+    let outputSchema;
+    if (call?.outputSchema && typeof call?.outputSchema === "string") {
+      outputSchema = JSON.parse(call?.outputSchema);
+    } else {
+      return;
+    }
 
     const transcription = call?.transcripts.map((transcript) => {
       const role =

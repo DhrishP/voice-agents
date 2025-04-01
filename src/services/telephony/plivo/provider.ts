@@ -70,7 +70,6 @@ export class PlivoProvider implements TelephonyProvider {
       const hasNumber = numbers.some(
         (number: any) => number.number === payload.fromNumber
       );
-
       if (payload.outputSchema) {
         try {
           JSON.parse(payload.outputSchema);

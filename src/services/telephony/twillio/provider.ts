@@ -15,7 +15,6 @@ import {
 export class TwilioProvider implements TelephonyProvider {
   private ws: WebSocket | null = null;
   private listenerCallback: ((chunk: string) => void) | null = null;
-  private isStarted: boolean = false;
   private sid: string | null = null;
   private id: string;
   private static twilioClient: twilio.Twilio;
@@ -103,7 +102,6 @@ export class TwilioProvider implements TelephonyProvider {
         if (message.event === "start") {
           console.log(message);
           console.log("Received start event from Twilio");
-          this.isStarted = true;
           this.sid = message.streamSid;
         }
 
@@ -239,7 +237,6 @@ export class TwilioProvider implements TelephonyProvider {
       this.ws = null;
     }
     this.listenerCallback = null;
-    this.isStarted = false;
   }
 
   public async transfer(toNumber: string): Promise<void> {
