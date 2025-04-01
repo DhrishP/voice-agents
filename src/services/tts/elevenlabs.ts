@@ -113,12 +113,36 @@ export class ElevenLabsTTSService implements TTSService {
     });
   }
 
+  private async waitForWebSocketOpen(maxAttempts: number = 10): Promise<void> {
+    return new Promise((resolve, reject) => {
+      let attempts = 0;
+      const checkConnection = () => {
+        if (this.ws?.readyState === WebSocket.OPEN) {
+          resolve();
+        } else if (attempts >= maxAttempts) {
+          reject(
+            new Error("Maximum retry attempts reached for WebSocket connection")
+          );
+        } else {
+          attempts++;
+          console.log(
+            `Waiting for WebSocket to open... Attempt ${attempts}/${maxAttempts}`
+          );
+          setTimeout(checkConnection, 1000); 
+        }
+      };
+      checkConnection();
+    });
+  }
+
   async generate(text: string): Promise<string> {
     if (!this.ws) {
       await this.initialize();
     }
 
     try {
+      await this.waitForWebSocketOpen();
+
       this.ws?.send(
         JSON.stringify({
           text: text,

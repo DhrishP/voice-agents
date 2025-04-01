@@ -6,7 +6,6 @@ import { Client } from "plivo";
 import DTMFService from "../../dtmf";
 import { DTMFTone } from "../../../types/dtmf";
 import { callEnded } from "../../../utils/emit-functions";
-import { z } from "zod";
 import {
   VALID_LANGUAGES,
   VALID_LLM_PROVIDERS,
