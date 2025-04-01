@@ -33,15 +33,17 @@ export class WebSocketProvider implements TelephonyProvider {
     this.id = id;
   }
 
-  async validateInput(payload: VoiceCallJobData): Promise<boolean> {
+  async validateInput(
+    payload: VoiceCallJobData
+  ): Promise<{ isValid: boolean; error: string | null }> {
     if (payload.outputSchema) {
       try {
         JSON.parse(payload.outputSchema);
       } catch (error) {
-        return false;
+        return { isValid: false, error: "Invalid output schema" };
       }
     }
-    return !!payload.prompt;
+    return { isValid: !!payload.prompt, error: null };
   }
 
   setWsObject(ws: WebSocket) {

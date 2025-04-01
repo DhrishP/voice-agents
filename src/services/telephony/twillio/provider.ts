@@ -31,10 +31,12 @@ export class TwilioProvider implements TelephonyProvider {
     }
   }
 
-  async validateInput(payload: VoiceCallJobData): Promise<boolean> {
+  async validateInput(
+    payload: VoiceCallJobData
+  ): Promise<{ isValid: boolean; error: string | null }> {
     try {
       if (!payload.toNumber || !payload.prompt) {
-        return false;
+        return { isValid: false, error: "Invalid input" };
       }
       const incomingPhoneNumbers =
         await TwilioProvider.twilioClient.incomingPhoneNumbers.list();
@@ -43,7 +45,7 @@ export class TwilioProvider implements TelephonyProvider {
         try {
           JSON.parse(payload.outputSchema);
         } catch (error) {
-          return false;
+          return { isValid: false, error: "Invalid output schema" };
         }
       }
 
@@ -51,10 +53,10 @@ export class TwilioProvider implements TelephonyProvider {
         (number) => number.phoneNumber === payload.fromNumber
       );
       if (!hasNumber) {
-        return false;
+        return { isValid: false, error: "Invalid input" };
       }
 
-      return true;
+      return { isValid: true, error: null };
     } catch (error) {
       console.error("Failed to validate Twilio phone number:", error);
       throw error;

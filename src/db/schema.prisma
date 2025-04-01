@@ -24,7 +24,7 @@ model Call {
   telephonyProvider String
   outputSchema      Json?
   output            Json?
-  summary           String
+  summary           String?
   errorReason       String?
   language          String     @default("en-US")
 
@@ -92,7 +92,7 @@ enum UsageType {
 
 model Usage {
   id     String    @id @default(uuid())
-  callId String   
+  callId String
   type   UsageType
   usage  Int?
 

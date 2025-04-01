@@ -32,10 +32,12 @@ export class PlivoProvider implements TelephonyProvider {
     }
   }
 
-  async validateInput(payload: VoiceCallJobData): Promise<boolean> {
+  async validateInput(
+    payload: VoiceCallJobData
+  ): Promise<{ isValid: boolean; error: string | null }> {
     try {
       if (!payload.toNumber || !payload.prompt) {
-        return false;
+        return { isValid: false, error: "Invalid input" };
       }
 
       const numbers = await PlivoProvider.plivoClient.numbers.list({});
@@ -47,14 +49,14 @@ export class PlivoProvider implements TelephonyProvider {
         try {
           JSON.parse(payload.outputSchema);
         } catch (error) {
-          return false;
+          return { isValid: false, error: "Invalid output schema" };
         }
       }
       if (!hasNumber) {
-        return false;
+        return { isValid: false, error: "Invalid input" };
       }
 
-      return true;
+      return { isValid: true, error: null };
     } catch (error) {
       console.error("Failed to validate Plivo phone number:", error);
       throw error;

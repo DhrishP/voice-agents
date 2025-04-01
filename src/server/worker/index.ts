@@ -7,7 +7,7 @@ import { VoiceCallJobData, VoiceCallJobResult } from "../../types/voice-call";
 import eventBus from "../../engine";
 import { TwilioProvider } from "../../services/telephony/twillio/provider";
 import { WebSocketProvider } from "../../services/telephony/websocket/provider";
-
+import { PlivoProvider } from "../../services/telephony/plivo/provider";
 // Initialize queue
 const queue = new Queue(QUEUE_NAMES.VOICE_CALL, {
   connection,
@@ -24,17 +24,24 @@ async function processJob(job: Job<VoiceCallJobData>): Promise<void> {
 
     if (job.data.telephonyProvider === "twilio") {
       const provider = new TwilioProvider(job.data.callId || "");
-      const isValid = await provider.validateInput(job.data);
+      const inputValidation = await provider.validateInput(job.data);
 
-      if (!isValid) {
-        throw new Error("Invalid Websocket Input");
+      if (!inputValidation.isValid) {
+        throw new Error(inputValidation.error || "Invalid Twilio input");
       }
     } else if (job.data.telephonyProvider === "websocket") {
       const provider = new WebSocketProvider(job.data.callId || "");
-      const isValid = await provider.validateInput(job.data);
+      const inputValidation = await provider.validateInput(job.data);
 
-      if (!isValid) {
-        throw new Error("Invalid WebSocket input");
+      if (!inputValidation.isValid) {
+        throw new Error(inputValidation.error || "Invalid WebSocket input");
+      }
+    } else if (job.data.telephonyProvider === "plivo") {
+      const provider = new PlivoProvider(job.data.callId || "");
+      const inputValidation = await provider.validateInput(job.data);
+
+      if (!inputValidation.isValid) {
+        throw new Error(inputValidation.error || "Invalid Plivo input");
       }
     }
 
