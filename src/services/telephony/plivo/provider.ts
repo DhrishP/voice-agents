@@ -7,6 +7,12 @@ import DTMFService from "../../dtmf";
 import { DTMFTone } from "../../../types/dtmf";
 import { callEnded } from "../../../utils/emit-functions";
 import { z } from "zod";
+import {
+  VALID_LANGUAGES,
+  VALID_LLM_PROVIDERS,
+  VALID_STT_PROVIDERS,
+  VALID_TTS_PROVIDERS,
+} from "../../../config/valid-parameters";
 export class PlivoProvider implements TelephonyProvider {
   private ws: WebSocket | null = null;
   private listenerCallback: ((chunk: string) => void) | null = null;
@@ -38,6 +44,26 @@ export class PlivoProvider implements TelephonyProvider {
     try {
       if (!payload.toNumber || !payload.prompt) {
         return { isValid: false, error: "Invalid input" };
+      }
+
+      if (!VALID_LLM_PROVIDERS.includes(payload.llmProvider)) {
+        return { isValid: false, error: "Invalid LLM provider" };
+      }
+
+      if (!VALID_TTS_PROVIDERS.includes(payload.ttsProvider)) {
+        return { isValid: false, error: "Invalid TTS provider" };
+      }
+
+      if (!VALID_STT_PROVIDERS.includes(payload.sttProvider)) {
+        return { isValid: false, error: "Invalid STT provider" };
+      }
+
+      if (!payload.language) {
+        return { isValid: false, error: "Invalid language" };
+      }
+
+      if (!VALID_LANGUAGES.includes(payload.language)) {
+        return { isValid: false, error: "Invalid language" };
       }
 
       const numbers = await PlivoProvider.plivoClient.numbers.list({});

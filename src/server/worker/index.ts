@@ -3,7 +3,7 @@ import connection, { QUEUE_NAMES } from "../../config/worker";
 import Server from "../../types/server";
 import express from "express";
 import { createQueueDashExpressMiddleware } from "@queuedash/api";
-import { VoiceCallJobData, VoiceCallJobResult } from "../../types/voice-call";
+import { VoiceCallJobData } from "../../types/voice-call";
 import eventBus from "../../engine";
 import { TwilioProvider } from "../../services/telephony/twillio/provider";
 import { WebSocketProvider } from "../../services/telephony/websocket/provider";
@@ -43,6 +43,8 @@ async function processJob(job: Job<VoiceCallJobData>): Promise<void> {
       if (!inputValidation.isValid) {
         throw new Error(inputValidation.error || "Invalid Plivo input");
       }
+    } else {
+      throw new Error("Invalid telephony provider");
     }
 
     eventBus.emit("call.initiated", {

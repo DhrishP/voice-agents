@@ -5,6 +5,12 @@ import twilio from "twilio";
 import { VoiceCallJobData } from "../../../types/voice-call";
 import DTMFService from "../../dtmf";
 import { DTMFTone } from "../../../types/dtmf";
+import {
+  VALID_LANGUAGES,
+  VALID_TTS_PROVIDERS,
+  VALID_LLM_PROVIDERS,
+  VALID_STT_PROVIDERS,
+} from "../../../config/valid-parameters";
 
 export class TwilioProvider implements TelephonyProvider {
   private ws: WebSocket | null = null;
@@ -40,6 +46,26 @@ export class TwilioProvider implements TelephonyProvider {
       }
       const incomingPhoneNumbers =
         await TwilioProvider.twilioClient.incomingPhoneNumbers.list();
+
+      if (!VALID_LLM_PROVIDERS.includes(payload.llmProvider)) {
+        return { isValid: false, error: "Invalid LLM provider" };
+      }
+
+      if (!VALID_TTS_PROVIDERS.includes(payload.ttsProvider)) {
+        return { isValid: false, error: "Invalid TTS provider" };
+      }
+
+      if (!VALID_STT_PROVIDERS.includes(payload.sttProvider)) {
+        return { isValid: false, error: "Invalid STT provider" };
+      }
+
+      if (!payload.language) {
+        return { isValid: false, error: "Invalid language" };
+      }
+
+      if (!VALID_LANGUAGES.includes(payload.language)) {
+        return { isValid: false, error: "Invalid language" };
+      }
 
       if (payload.outputSchema) {
         try {

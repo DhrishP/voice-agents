@@ -3,6 +3,7 @@ import { TelephonyProvider } from "../../../types/providers/telephony";
 import eventBus from "../../../engine";
 import { VoiceCallJobData, AudioChunkData } from "../../../types/voice-call";
 import { engineError, callEnded } from "../../../utils/emit-functions";
+import { VALID_LANGUAGES } from "../../../config/valid-parameters";
 const alawmulaw = require("alawmulaw");
 
 interface AudioChunk {
@@ -43,6 +44,14 @@ export class WebSocketProvider implements TelephonyProvider {
         return { isValid: false, error: "Invalid output schema" };
       }
     }
+    if (!payload.language) {
+      return { isValid: false, error: "Invalid language" };
+    }
+
+    if (!VALID_LANGUAGES.includes(payload.language)) {
+      return { isValid: false, error: "Invalid language" };
+    }
+
     return { isValid: !!payload.prompt, error: null };
   }
 
