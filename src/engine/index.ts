@@ -364,20 +364,21 @@ eventBus.on("call.ended", async (event) => {
       return;
     }
     const sdkService = new SDKServices();
-    const { parsedObject, usage } = await sdkService.generateOutputSchema(
-      ctx.callId,
+    const { parsedObject, usageTokens } = await sdkService.generateOutputSchema(
       outputSchema,
       call?.provider?.llmProvider || "",
       call?.provider?.llmModel || "",
       transcription
     );
-    await prisma.usage.create({
-      data: {
-        callId: ctx.callId,
-        type: "LLM",
-        usage: usage.totalTokens,
-      },
-    });
+    if (usageTokens) {
+      await prisma.usage.create({
+        data: {
+          callId: ctx.callId,
+          type: "LLM",
+          usage: usageTokens,
+        },
+      });
+    }
     if (parsedObject) {
       await prisma.call.update({
         where: { id: ctx.callId },

@@ -19,6 +19,7 @@ import {
   DEFAULT_AUDIO_FORMAT,
   DEFAULT_AUDIO_FORMAT_PCM_S16LE,
 } from "../../lib/audio/format";
+import { objectToZodSchema } from "../../utils/schema";
 
 export class SDKServices {
   private google: GoogleGenerativeAIProvider;
@@ -205,31 +206,38 @@ export class SDKServices {
   }
 
   async generateOutputSchema(
-    callId: string,
     outputSchema: Record<string, any>,
     provider: string,
     model: string,
     transcription: CoreMessage[]
   ) {
-    const providerModel = this.getProviderModel(provider, model);
+    let usageTokens = 0;
+    try {
+      const providerModel = this.getProviderModel(provider, model);
 
-    const zodSchema = z.object(outputSchema);
-    const { object, usage } = await generateObject({
-      model: providerModel,
-      schema: zodSchema,
-      messages: [
-        ...transcription,
-        {
-          role: "user",
-          content: `generate a structured output using the call transcription based on the provided history in the given output format`,
-        },
-      ],
-    });
-    const parsedObject = zodSchema.parse(object);
-    if (!parsedObject) {
-      return { parsedObject: null, usage };
+      const zodSchema = objectToZodSchema(outputSchema);
+      console.log("zodSchema", zodSchema);
+      const { object, usage } = await generateObject({
+        model: providerModel,
+        schema: zodSchema,
+        messages: [
+          ...transcription,
+          {
+            role: "user",
+            content: `generate a structured output using the call transcription based on the provided history in the given output format`,
+          },
+        ],
+      });
+      const parsedObject = zodSchema.parse(object);
+      usageTokens = usage?.totalTokens || 0;
+      if (!parsedObject) {
+        return { parsedObject: null, usageTokens };
+      }
+
+      return { parsedObject, usageTokens };
+    } catch (error) {
+      console.error("Error generating output schema:", error);
+      return { parsedObject: null, usageTokens };
     }
-
-    return { parsedObject, usage };
   }
 }
