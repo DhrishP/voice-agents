@@ -27,7 +27,7 @@ async function processJob(job: Job<VoiceCallJobData>): Promise<void> {
       const isValid = await provider.validateInput(job.data);
 
       if (!isValid) {
-        throw new Error("Invalid phone number");
+        throw new Error("Invalid Websocket Input");
       }
     } else if (job.data.telephonyProvider === "websocket") {
       const provider = new WebSocketProvider(job.data.callId || "");

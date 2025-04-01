@@ -34,8 +34,12 @@ export class WebSocketProvider implements TelephonyProvider {
   }
 
   async validateInput(payload: VoiceCallJobData): Promise<boolean> {
-    if (typeof payload.outputSchema !== "string") {
-      return false;
+    if (payload.outputSchema) {
+      try {
+        JSON.parse(payload.outputSchema);
+      } catch (error) {
+        return false;
+      }
     }
     return !!payload.prompt;
   }

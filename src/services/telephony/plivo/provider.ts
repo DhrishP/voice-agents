@@ -43,8 +43,12 @@ export class PlivoProvider implements TelephonyProvider {
         (number: any) => number.number === payload.fromNumber
       );
 
-      if (typeof payload.outputSchema !== "string") {
-        return false;
+      if (payload.outputSchema) {
+        try {
+          JSON.parse(payload.outputSchema);
+        } catch (error) {
+          return false;
+        }
       }
       if (!hasNumber) {
         return false;

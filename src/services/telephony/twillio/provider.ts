@@ -39,8 +39,12 @@ export class TwilioProvider implements TelephonyProvider {
       const incomingPhoneNumbers =
         await TwilioProvider.twilioClient.incomingPhoneNumbers.list();
 
-      if (typeof payload.outputSchema !== "string") {
-        return false;
+      if (payload.outputSchema) {
+        try {
+          JSON.parse(payload.outputSchema);
+        } catch (error) {
+          return false;
+        }
       }
 
       const hasNumber = incomingPhoneNumbers.some(

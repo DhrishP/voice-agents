@@ -23,7 +23,7 @@ export const VoiceCallRequestSchema = z.object({
     .min(1, "To number is required")
     .refine(validator.isMobilePhone),
   prompt: z.string().min(1, "Prompt is required"),
-  outputSchema: z.record(z.string(), z.any()).optional(),
+  outputSchema: z.string().optional(),
   telephonyProvider: z.enum(["twilio", "plivo", "websocket"]).default("twilio"),
   llmProvider: z.string().default("openai"),
   llmModel: z.string().default("gpt-4o"),
