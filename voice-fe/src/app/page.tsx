@@ -21,6 +21,33 @@ export default function VoiceDemoPage() {
     console.log("Debug:", message);
   }, []);
 
+  // Add function to ensure audio context is ready
+  const ensureAudioContext = useCallback(async () => {
+    const win = typeof window !== "undefined" ? window : null;
+    if (!win) return false;
+
+    try {
+      if (!audioContextRef.current) {
+        const AudioContext =
+          win.AudioContext || (win as any).webkitAudioContext;
+        audioContextRef.current = new AudioContext({
+          sampleRate: 8000,
+        });
+        addDebugMessage("Created new audio context at 8kHz");
+      }
+
+      if (audioContextRef.current.state === "suspended") {
+        await audioContextRef.current.resume();
+        addDebugMessage("Resumed suspended audio context");
+      }
+
+      return true;
+    } catch (error) {
+      addDebugMessage(`Audio context error: ${error}`);
+      return false;
+    }
+  }, [addDebugMessage]);
+
   const { callState, callDuration, hangup, pipe, on, startCall, isLoading } =
     useInducedVoice();
 
@@ -52,6 +79,15 @@ export default function VoiceDemoPage() {
     if (callState === CallState.CONNECTED) {
       addDebugMessage("Setting up audio output handler");
 
+      // Ensure audio context is ready when call connects
+      ensureAudioContext().then((ready) => {
+        if (!ready) {
+          addDebugMessage("Failed to initialize audio context for call");
+          return;
+        }
+        addDebugMessage("Audio context ready for call");
+      });
+
       const handleAudioChunk = async (audioData: string) => {
         if (!audioContextRef.current) {
           addDebugMessage("No audio context available");
@@ -59,14 +95,25 @@ export default function VoiceDemoPage() {
         }
 
         try {
+          // Always ensure audio context is running before processing audio
           if (audioContextRef.current.state === "suspended") {
             await audioContextRef.current.resume();
+            addDebugMessage("Resumed audio context for playback");
           }
 
           const audioArrayBuffer = Buffer.from(audioData, "base64").buffer;
-          const audioBuffer = await audioContextRef.current.decodeAudioData(
-            audioArrayBuffer
-          );
+
+          // Add more detailed error handling for audio decoding
+          let audioBuffer;
+          try {
+            audioBuffer = await audioContextRef.current.decodeAudioData(
+              audioArrayBuffer
+            );
+          } catch (decodeError) {
+            addDebugMessage(`Failed to decode audio: ${decodeError}`);
+            return;
+          }
+
           const source = audioContextRef.current.createBufferSource();
           source.buffer = audioBuffer;
           source.connect(audioContextRef.current.destination);
@@ -79,6 +126,7 @@ export default function VoiceDemoPage() {
             audioSourcesRef.current = audioSourcesRef.current.filter(
               (s) => s !== source
             );
+            addDebugMessage("Audio chunk playback completed");
           };
         } catch (error) {
           console.error("Error playing audio:", error);
@@ -197,6 +245,53 @@ export default function VoiceDemoPage() {
       addDebugMessage("Creating new call...");
       audioChunksRef.current = 0;
 
+      // Initialize audio context with user interaction, similar to test tone
+      const win = typeof window !== "undefined" ? window : null;
+      if (!audioContextRef.current && win) {
+        const AudioContext =
+          win.AudioContext || (win as any).webkitAudioContext;
+        audioContextRef.current = new AudioContext({
+          sampleRate: 8000,
+        });
+        addDebugMessage("Audio context initialized");
+      }
+
+      if (!audioContextRef.current) {
+        addDebugMessage("Could not initialize audio context");
+        return;
+      }
+
+      // Resume and initialize audio with a brief tone, like the test tone did
+      if (audioContextRef.current.state === "suspended") {
+        await audioContextRef.current.resume();
+        addDebugMessage("Resumed audio context");
+      }
+
+      // Play a quick initialization tone (very short and quiet)
+      const oscillator = audioContextRef.current.createOscillator();
+      const gainNode = audioContextRef.current.createGain();
+
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(
+        440,
+        audioContextRef.current.currentTime
+      );
+      gainNode.gain.setValueAtTime(0.01, audioContextRef.current.currentTime); // Very quiet
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContextRef.current.destination);
+
+      oscillator.start();
+      oscillator.stop(audioContextRef.current.currentTime + 0.01); // Very short duration
+
+      addDebugMessage("Audio system initialized");
+
+      // Clean up after the tone
+      setTimeout(() => {
+        oscillator.disconnect();
+        gainNode.disconnect();
+      }, 100);
+
       await startCall({
         prompt:
           "You are a helpful voice assistant. Keep your responses concise and clear. Answer the user's questions helpfully.",
@@ -209,60 +304,6 @@ export default function VoiceDemoPage() {
       addDebugMessage(`Error creating call: ${errorMsg}`);
     }
   }, [startCall, addDebugMessage]);
-
-  const playTestTone = async () => {
-    try {
-      const win = typeof window !== "undefined" ? window : null;
-      if (!audioContextRef.current && win) {
-        const AudioContext =
-          win.AudioContext || (win as any).webkitAudioContext;
-        audioContextRef.current = new AudioContext({
-          sampleRate: 8000,
-        });
-        addDebugMessage("Audio context initialized for test tone");
-      }
-
-      if (!audioContextRef.current) {
-        addDebugMessage("Could not initialize audio context");
-        return;
-      }
-
-      if (audioContextRef.current.state === "suspended") {
-        await audioContextRef.current.resume();
-        addDebugMessage("Resumed audio context for test tone");
-      }
-
-      const oscillator = audioContextRef.current.createOscillator();
-      const gainNode = audioContextRef.current.createGain();
-
-      oscillator.type = "sine";
-      oscillator.frequency.setValueAtTime(
-        440,
-        audioContextRef.current.currentTime
-      );
-      gainNode.gain.setValueAtTime(0.5, audioContextRef.current.currentTime);
-
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContextRef.current.destination);
-
-      oscillator.start();
-      addDebugMessage("Test tone started");
-
-      setTimeout(() => {
-        oscillator.stop();
-        oscillator.disconnect();
-        gainNode.disconnect();
-        addDebugMessage("Test tone stopped");
-      }, 1000);
-    } catch (error) {
-      console.error("Test tone error:", error);
-      addDebugMessage(
-        `Test tone error: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
-    }
-  };
 
   return (
     <main className="min-h-screen p-8">
@@ -283,13 +324,6 @@ export default function VoiceDemoPage() {
               className="bg-blue-500 text-white px-4 py-2 rounded disabled:bg-blue-300"
             >
               {isLoading ? "Creating call..." : "Start New Call"}
-            </button>
-
-            <button
-              onClick={playTestTone}
-              className="bg-green-500 text-white px-4 py-2 rounded ml-4"
-            >
-              Play Test Tone
             </button>
           </div>
         ) : (
