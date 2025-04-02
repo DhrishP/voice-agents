@@ -9,44 +9,105 @@ export default function VoiceDemoPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [debugInfo, setDebugInfo] = useState<string[]>([]);
+  const [isWindowAvailable, setIsWindowAvailable] = useState(false);
   const audioChunksRef = useRef<number>(0);
   const audioContextRef = useRef<AudioContext | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const audioSourcesRef = useRef<AudioBufferSourceNode[]>([]);
-  const window = UseWindow();
+  const windowObj = UseWindow();
 
   const addDebugMessage = useCallback((message: string) => {
     setDebugInfo((prev) => [message, ...prev].slice(0, 20));
     console.log("Debug:", message);
   }, []);
 
-  // Add function to ensure audio context is ready
+  // Check window availability
+  useEffect(() => {
+    if (windowObj) {
+      setIsWindowAvailable(true);
+      addDebugMessage("Browser environment initialized successfully");
+    }
+  }, [windowObj, addDebugMessage]);
+
   const ensureAudioContext = useCallback(async () => {
-    const win = typeof window !== "undefined" ? window : null;
-    if (!win) return false;
+    if (!windowObj) {
+      addDebugMessage("Window object not available yet");
+      return false;
+    }
 
     try {
-      if (!audioContextRef.current) {
-        const AudioContext =
-          win.AudioContext || (win as any).webkitAudioContext;
+      // Check if AudioContext is supported
+      const AudioContext =
+        windowObj.AudioContext || (windowObj as any).webkitAudioContext;
+      if (!AudioContext) {
+        const errorMsg = "AudioContext not supported in this browser";
+        setError(errorMsg);
+        addDebugMessage(errorMsg);
+        return false;
+      }
+
+      // If we already have an audio context, try to use it
+      if (audioContextRef.current) {
+        addDebugMessage(
+          `Existing audio context state: ${audioContextRef.current.state}`
+        );
+
+        if (audioContextRef.current.state === "suspended") {
+          try {
+            await audioContextRef.current.resume();
+            addDebugMessage("Successfully resumed existing audio context");
+            return true;
+          } catch (resumeError) {
+            addDebugMessage(
+              `Failed to resume existing context: ${resumeError}`
+            );
+          }
+        } else if (audioContextRef.current.state === "running") {
+          addDebugMessage("Audio context already running");
+          return true;
+        }
+      }
+
+      // Create new audio context
+      try {
         audioContextRef.current = new AudioContext({
           sampleRate: 8000,
         });
-        addDebugMessage("Created new audio context at 8kHz");
-      }
+        addDebugMessage(
+          `New audio context created with state: ${audioContextRef.current.state}`
+        );
 
-      if (audioContextRef.current.state === "suspended") {
-        await audioContextRef.current.resume();
-        addDebugMessage("Resumed suspended audio context");
-      }
+        if (audioContextRef.current.state === "suspended") {
+          try {
+            await audioContextRef.current.resume();
+            addDebugMessage("Successfully resumed new audio context");
+          } catch (resumeError) {
+            addDebugMessage(
+              `Warning: New context created but suspended: ${resumeError}`
+            );
+            setError("Please click somewhere on the page to enable audio");
+            return false;
+          }
+        }
 
-      return true;
+        return true;
+      } catch (createError) {
+        const errorMsg =
+          createError instanceof Error
+            ? createError.message
+            : String(createError);
+        setError(`Could not create audio context: ${errorMsg}`);
+        addDebugMessage(`Audio context creation failed: ${errorMsg}`);
+        return false;
+      }
     } catch (error) {
-      addDebugMessage(`Audio context error: ${error}`);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      setError(`Audio initialization failed: ${errorMsg}`);
+      addDebugMessage(`Critical audio error: ${errorMsg}`);
       return false;
     }
-  }, [addDebugMessage]);
+  }, [windowObj, addDebugMessage]);
 
   const { callState, callDuration, hangup, pipe, on, startCall, isLoading } =
     useInducedVoice();
@@ -240,70 +301,84 @@ export default function VoiceDemoPage() {
   };
 
   const createNewCall = useCallback(async () => {
+    if (!isWindowAvailable || !windowObj) {
+      addDebugMessage("Cannot create call - browser environment not ready");
+      return;
+    }
+
     try {
       setError(null);
       addDebugMessage("Creating new call...");
       audioChunksRef.current = 0;
 
-      // Initialize audio context with user interaction, similar to test tone
-      const win = typeof window !== "undefined" ? window : null;
-      if (!audioContextRef.current && win) {
-        const AudioContext =
-          win.AudioContext || (win as any).webkitAudioContext;
-        audioContextRef.current = new AudioContext({
-          sampleRate: 8000,
-        });
-        addDebugMessage("Audio context initialized");
+      // Try to initialize audio with user interaction
+      const audioReady = await ensureAudioContext();
+      if (!audioReady) {
+        addDebugMessage(
+          "Failed to initialize audio system - trying to handle autoplay policy"
+        );
+
+        // Add a temporary silent audio element to help with autoplay policy
+        const silentAudio = new Audio();
+        silentAudio.src =
+          "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+
+        try {
+          await silentAudio.play();
+          silentAudio.remove();
+          addDebugMessage(
+            "Autoplay policy handled - retrying audio initialization"
+          );
+
+          // Try audio initialization again
+          const retryReady = await ensureAudioContext();
+          if (!retryReady) {
+            addDebugMessage(
+              "Audio initialization failed after autoplay handling"
+            );
+            setError("Please click somewhere on the page and try again");
+            return;
+          }
+        } catch (playError) {
+          addDebugMessage(
+            "Autoplay handling failed - user interaction required"
+          );
+          setError("Please click somewhere on the page and try again");
+          return;
+        }
       }
 
-      if (!audioContextRef.current) {
-        addDebugMessage("Could not initialize audio context");
+      // Verify audio context is available and running
+      if (
+        !audioContextRef.current ||
+        audioContextRef.current.state !== "running"
+      ) {
+        setError("Audio system not properly initialized");
+        addDebugMessage(
+          `Audio context state: ${audioContextRef.current?.state || "none"}`
+        );
         return;
       }
 
-      // Resume and initialize audio with a brief tone, like the test tone did
-      if (audioContextRef.current.state === "suspended") {
-        await audioContextRef.current.resume();
-        addDebugMessage("Resumed audio context");
-      }
-
-      // Play a quick initialization tone (very short and quiet)
-      const oscillator = audioContextRef.current.createOscillator();
-      const gainNode = audioContextRef.current.createGain();
-
-      oscillator.type = "sine";
-      oscillator.frequency.setValueAtTime(
-        440,
-        audioContextRef.current.currentTime
-      );
-      gainNode.gain.setValueAtTime(0.01, audioContextRef.current.currentTime); // Very quiet
-
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContextRef.current.destination);
-
-      oscillator.start();
-      oscillator.stop(audioContextRef.current.currentTime + 0.01); // Very short duration
-
-      addDebugMessage("Audio system initialized");
-
-      // Clean up after the tone
-      setTimeout(() => {
-        oscillator.disconnect();
-        gainNode.disconnect();
-      }, 100);
+      addDebugMessage("Audio system initialized successfully - starting call");
 
       await startCall({
         prompt:
           "You are a helpful voice assistant. Keep your responses concise and clear. Answer the user's questions helpfully.",
       });
-
-      addDebugMessage("Call created successfully");
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "An error occurred";
-      setError(errorMsg);
-      addDebugMessage(`Error creating call: ${errorMsg}`);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      setError(`Failed to create call: ${errorMessage}`);
+      addDebugMessage(`Call creation error: ${errorMessage}`);
     }
-  }, [startCall, addDebugMessage]);
+  }, [
+    isWindowAvailable,
+    windowObj,
+    ensureAudioContext,
+    addDebugMessage,
+    startCall,
+  ]);
 
   return (
     <main className="min-h-screen p-8">
@@ -316,11 +391,13 @@ export default function VoiceDemoPage() {
           </div>
         )}
 
-        {callState === CallState.IDLE || callState === CallState.ENDED ? (
+        {!isWindowAvailable ? (
+          <div className="text-gray-600">Loading browser environment...</div>
+        ) : callState === CallState.IDLE || callState === CallState.ENDED ? (
           <div className="space-y-4">
             <button
               onClick={createNewCall}
-              disabled={isLoading}
+              disabled={isLoading || !isWindowAvailable}
               className="bg-blue-500 text-white px-4 py-2 rounded disabled:bg-blue-300"
             >
               {isLoading ? "Creating call..." : "Start New Call"}
