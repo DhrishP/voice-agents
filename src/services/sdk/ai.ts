@@ -93,33 +93,40 @@ export class SDKServices {
                     .describe("The reason for executing this tool"),
                 }),
                 execute: async (args) => {
-                  const { reason, ...toolArgs } = args;
-                  const url = new URL(toolConfig.apiUrl);
-                  const method =
-                    url.searchParams.get("method")?.toUpperCase() || "POST";
+                  try {
+                    const { reason, ...toolArgs } = args;
+                    const url = new URL(toolConfig.apiUrl);
+                    const method =
+                      url.searchParams.get("method")?.toUpperCase() || "POST";
 
-                  if (method === "GET") {
+                    if (method === "GET") {
+                      return {
+                        success: true,
+                        message: "GET requests cannot contain a payload",
+                      };
+                    }
+
+                    await axios({
+                      method: method,
+                      url: url.toString(),
+                      data: toolArgs,
+                    });
+
                     return {
                       success: true,
-                      message: "GET requests cannot contain a payload",
+                      message: `Executed ${
+                        toolConfig.name
+                      } with reason: ${reason}, args: ${JSON.stringify(
+                        toolArgs
+                      )}`,
+                    };
+                  } catch (error: any) {
+                    console.error("Tool execution error:", error);
+                    return {
+                      success: false,
+                      message: `Error executing ${toolConfig.name}: ${error.message}`,
                     };
                   }
-
-                  const response = await axios({
-                    method: method,
-                    url: url.toString(),
-                    data: toolArgs,
-                  });
-
-                  console.log("response", response.data);
-                  return {
-                    success: true,
-                    message: `Executed ${
-                      toolConfig.name
-                    } with reason: ${reason}, args: ${JSON.stringify(
-                      toolArgs
-                    )}`,
-                  };
                 },
               }),
             }))
@@ -215,20 +222,20 @@ export class SDKServices {
           }),
         },
         onFinish: async ({ text, toolResults, usage }) => {
-          console.log("toolResults", toolResults);
           if (toolResults.length) {
-            console.log("here");
-            await prisma.transcript.create({
-              data: {
-                callId: callId,
-                type: TranscriptType.TOOL,
-                transcript: toolResults[0].args.reason,
-              },
-            });
-            history.push({
-              role: "data",
-              content: `[${toolResults[0].toolName}] : ${toolResults[0].args.reason}`,
-            });
+            for (const toolResult of toolResults) {
+              await prisma.transcript.create({
+                data: {
+                  callId: callId,
+                  type: TranscriptType.TOOL,
+                  transcript: toolResult.args.reason,
+                },
+              });
+              history.push({
+                role: "data",
+                content: `[${toolResult.toolName}] : ${toolResult.args.reason}`,
+              });
+            }
           } else {
             history.push({ role: "assistant", content: text });
             await prisma.transcript.create({
