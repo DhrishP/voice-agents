@@ -48,6 +48,7 @@ app.get("/test", (req, res) => {
     fromNumber,
     toNumber,
     outputSchema,
+    tools,
   } = req.body;
   queue.add(QUEUE_NAMES.VOICE_CALL, {
     fromNumber,
@@ -63,6 +64,7 @@ app.get("/test", (req, res) => {
     language,
     callId: v4(),
     outputSchema,
+    tools,
   });
   res.send("Call initiated");
 });

@@ -74,6 +74,37 @@ export class TwilioProvider implements TelephonyProvider {
         }
       }
 
+      if (!(payload.tools.length === 0)) {
+        payload.tools.forEach((element) => {
+          try {
+            if (!element.name) {
+              return {
+                isValid: false,
+                error: "all tool calls should include a name",
+              };
+            }
+            if (!JSON.parse(element.outputSchema)) {
+              return {
+                isValid: false,
+                error: "schema structure should be an proper JSON",
+              };
+            }
+            if (!element.apiUrl) {
+              return { isValid: false, reason: "api url doesnt exists" };
+            }
+            if (!element.apiUrl.includes("https://")) {
+              return { isValid: false, error: "Invalid api url" };
+            }
+
+            if (!element.prompt) {
+              return { isValid: false, error: "No prompt exists" };
+            }
+          } catch (err: any) {
+            return { isValid: false, error: err.message };
+          }
+        });
+      }
+
       const hasNumber = incomingPhoneNumbers.some(
         (number) => number.phoneNumber === payload.fromNumber
       );
