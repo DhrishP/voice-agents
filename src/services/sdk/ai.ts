@@ -88,13 +88,24 @@ export class SDKServices {
                 description: toolConfig.prompt,
                 parameters: objectToZodSchema(toolConfig.parameters),
                 execute: async (args) => {
-                  const sendResponse = await axios.post(
-                    toolConfig.apiUrl,
-                    args
-                  );
-                  const response = sendResponse.data;
-                  console.log("response", response);
+                  const url = new URL(toolConfig.apiUrl);
+                  const method =
+                    url.searchParams.get("method")?.toUpperCase() || "POST";
 
+                  if (method === "GET") {
+                    return {
+                      success: true,
+                      message: "GET requests cannot contain a payload",
+                    };
+                  }
+
+                  const response = await axios({
+                    method: method,
+                    url: url.toString(),
+                    data: args,
+                  });
+
+                  console.log("response", response.data);
                   return {
                     success: true,
                     message: `Executed ${
