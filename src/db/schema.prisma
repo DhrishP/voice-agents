@@ -23,9 +23,9 @@ model Call {
   prompt            String
   telephonyProvider String
   outputSchema      Json?
-  output            Json?
   summary           String?
   errorReason       String?
+  externalTools     Json?
   language          String     @default("en-US")
 
   transcripts Transcript[]

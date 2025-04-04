@@ -31,6 +31,7 @@ app.post("/session", async (req: Request, res: Response) => {
         summary: "",
         language: req.body.language || "en-US",
         outputSchema: req.body.outputSchema || {},
+        externalTools: req.body.tools || [],
         provider: {
           create: {
             llmProvider: req.body.llmProvider || "openai",
@@ -60,6 +61,7 @@ app.post("/session", async (req: Request, res: Response) => {
       ttsModel: req.body.ttsModel || "eleven_multilingual_v2",
       language: req.body.language || "en-US",
       outputSchema: req.body.outputSchema || null,
+      tools: req.body.tools || [],
     });
 
     // Get the base URL from the operator
@@ -81,6 +83,8 @@ app.post("/session", async (req: Request, res: Response) => {
         ttsProvider: req.body.ttsProvider || "elevenlabs",
         ttsModel: req.body.ttsModel || "eleven_multilingual_v2",
         language: req.body.language || "en-US",
+        outputSchema: req.body.outputSchema || null,
+        tools: req.body.tools || [],
       },
     });
   } catch (error: any) {

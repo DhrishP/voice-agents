@@ -33,6 +33,12 @@ class PhoneCall {
   telephonyEngine: TelephonyProvider | null;
   payload: VoiceCallJobData;
   history: CoreMessage[] = [];
+  tools: {
+    name: string;
+    prompt: string;
+    parameters: Record<string, any>;
+    apiUrl: string;
+  }[] = [];
 
   transcription: {
     from: "agent" | "user";
@@ -52,6 +58,11 @@ class PhoneCall {
         content: this.payload.prompt,
       },
     ];
+    this.tools =
+      this.payload.tools.map((tool) => ({
+        ...tool,
+        parameters: JSON.parse(tool.parameters),
+      })) || [];
   }
 
   public async initializeCallRecord() {
@@ -65,6 +76,7 @@ class PhoneCall {
           summary: "",
           language: this.payload.language || "en-US",
           outputSchema: this.payload.outputSchema,
+          externalTools: this.tools,
           provider: {
             create: {
               llmProvider: this.payload.llmProvider,
@@ -141,7 +153,8 @@ class PhoneCall {
         this.history,
         this.payload.llmModel,
         this.payload.llmProvider,
-        this.payload.telephonyProvider
+        this.payload.telephonyProvider,
+        this.tools
       );
       await llmEngine.initialize();
 

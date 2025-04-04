@@ -14,12 +14,24 @@ export class LLMService implements AIService {
   private provider: string;
   private sdkService: SDKServices;
   private telephonyProvider: string;
+  private tools: {
+    name: string;
+    prompt: string;
+    parameters: Record<string, any>;
+    apiUrl: string;
+  }[];
   constructor(
     id: string,
     history: CoreMessage[],
     model: string,
     provider: string,
-    telephonyProvider: string
+    telephonyProvider: string,
+    tools: {
+      name: string;
+      prompt: string;
+      parameters: Record<string, any>;
+      apiUrl: string;
+    }[]
   ) {
     this.id = id;
     this.history = this.normalizeMessageHistory(history);
@@ -27,6 +39,7 @@ export class LLMService implements AIService {
     this.provider = provider;
     this.telephonyProvider = telephonyProvider;
     this.sdkService = new SDKServices();
+    this.tools = tools || [];
   }
 
   private normalizeMessageHistory(messages: CoreMessage[]): CoreMessage[] {
@@ -97,6 +110,7 @@ export class LLMService implements AIService {
         | "twilio"
         | "plivo"
         | "websocket",
+      tools: this.tools,
     });
 
     if (textStream) {
