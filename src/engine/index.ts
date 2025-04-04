@@ -59,10 +59,12 @@ class PhoneCall {
       },
     ];
     this.tools =
-      this.payload.tools.map((tool) => ({
-        ...tool,
-        parameters: JSON.parse(tool.parameters),
-      })) || [];
+      this.payload.tools && this.payload.tools.length > 0
+        ? this.payload.tools.map((tool) => ({
+            ...tool,
+            parameters: JSON.parse(tool.parameters),
+          }))
+        : [];
   }
 
   public async initializeCallRecord() {

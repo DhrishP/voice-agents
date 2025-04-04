@@ -161,6 +161,11 @@ app.get("/api/calls/:jobId", (req: Request, res: Response) => {
     });
 });
 
+app.put("/test-tools", async (req, res) => {
+  const { summary } = await req.body;
+  console.log("summary", summary);
+  res.send("success");
+});
 app.delete("/api/calls/:jobId", (req: Request, res: Response) => {
   const { jobId } = req.params;
 

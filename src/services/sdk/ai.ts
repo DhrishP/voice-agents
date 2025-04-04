@@ -86,8 +86,14 @@ export class SDKServices {
             .map((toolConfig) => ({
               [toolConfig.name]: tool({
                 description: toolConfig.prompt,
-                parameters: objectToZodSchema(toolConfig.parameters),
+                parameters: z.object({
+                  ...objectToZodSchema(toolConfig.parameters).shape,
+                  reason: z
+                    .string()
+                    .describe("The reason for executing this tool"),
+                }),
                 execute: async (args) => {
+                  const { reason, ...toolArgs } = args;
                   const url = new URL(toolConfig.apiUrl);
                   const method =
                     url.searchParams.get("method")?.toUpperCase() || "POST";
@@ -102,7 +108,7 @@ export class SDKServices {
                   const response = await axios({
                     method: method,
                     url: url.toString(),
-                    data: args,
+                    data: toolArgs,
                   });
 
                   console.log("response", response.data);
@@ -110,7 +116,9 @@ export class SDKServices {
                     success: true,
                     message: `Executed ${
                       toolConfig.name
-                    } with args: ${JSON.stringify(args)}`,
+                    } with reason: ${reason}, args: ${JSON.stringify(
+                      toolArgs
+                    )}`,
                   };
                 },
               }),
@@ -207,7 +215,9 @@ export class SDKServices {
           }),
         },
         onFinish: async ({ text, toolResults, usage }) => {
+          console.log("toolResults", toolResults);
           if (toolResults.length) {
+            console.log("here");
             await prisma.transcript.create({
               data: {
                 callId: callId,
@@ -258,7 +268,6 @@ export class SDKServices {
       const providerModel = this.getProviderModel(provider, model);
 
       const zodSchema = objectToZodSchema(outputSchema);
-      console.log("zodSchema", zodSchema);
       const { object, usage } = await generateObject({
         model: providerModel,
         schema: zodSchema,

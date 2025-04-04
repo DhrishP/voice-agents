@@ -1,4 +1,4 @@
-export const VALID_LANGUAGES = ["en-US", "hi-IN"];
+export const VALID_LANGUAGES = ["en-US", "hi"];
 
 export const VALID_LLM_PROVIDERS = ["openai", "gemini"];
 
