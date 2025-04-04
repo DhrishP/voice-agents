@@ -83,7 +83,7 @@ export class TwilioProvider implements TelephonyProvider {
                 error: "all tool calls should include a name",
               };
             }
-            if (!JSON.parse(element.outputSchema)) {
+            if (!JSON.parse(element.parameters)) {
               return {
                 isValid: false,
                 error: "schema structure should be an proper JSON",

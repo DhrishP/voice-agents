@@ -28,7 +28,7 @@ export const VoiceCallRequestSchema = z.object({
   tools: z.array(
     z.object({
       name: z.string(),
-      outputSchema: z.string(),
+      parameters: z.string(),
       prompt: z.string(),
       apiUrl: z.string(),
     })
