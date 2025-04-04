@@ -20,6 +20,7 @@ import {
   DEFAULT_AUDIO_FORMAT_PCM_S16LE,
 } from "../../lib/audio/format";
 import { objectToZodSchema } from "../../utils/schema";
+import axios from "axios";
 
 export class SDKServices {
   private google: GoogleGenerativeAIProvider;
@@ -61,12 +62,19 @@ export class SDKServices {
     history,
     callId,
     telephonyProvider,
+    tools,
   }: {
     model: string;
     provider: string;
     history: CoreMessage[];
     callId: string;
     telephonyProvider: "twilio" | "plivo" | "websocket";
+    tools: {
+      name: string;
+      prompt: string;
+      parameters: Record<string, any>;
+      apiUrl: string;
+    }[];
   }) {
     try {
       const providerModel = this.getProviderModel(provider, model);
@@ -74,6 +82,29 @@ export class SDKServices {
         model: providerModel,
         messages: history,
         tools: {
+          ...tools
+            .map((toolConfig) => ({
+              [toolConfig.name]: tool({
+                description: toolConfig.prompt,
+                parameters: objectToZodSchema(toolConfig.parameters),
+                execute: async (args) => {
+                  const sendResponse = await axios.post(
+                    toolConfig.apiUrl,
+                    args
+                  );
+                  const response = sendResponse.data;
+                  console.log("response", response);
+
+                  return {
+                    success: true,
+                    message: `Executed ${
+                      toolConfig.name
+                    } with args: ${JSON.stringify(args)}`,
+                  };
+                },
+              }),
+            }))
+            .reduce((acc, curr) => ({ ...acc, ...curr }), {}),
           hangupcall: tool({
             description: "Hang up the call",
             parameters: z.object({
