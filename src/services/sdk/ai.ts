@@ -216,7 +216,7 @@ export class SDKServices {
 
               return {
                 success: result.success,
-                message: result.message,
+                message: `Generated DTMF tones for reason : ${reason}`,
               };
             },
           }),
