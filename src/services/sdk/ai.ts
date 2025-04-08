@@ -78,7 +78,7 @@ export class SDKServices {
   }) {
     try {
       const providerModel = this.getProviderModel(provider, model);
-      const { textStream, usage } = await streamText({
+      const { textStream } = await streamText({
         model: providerModel,
         messages: history,
         tools: {
@@ -246,6 +246,7 @@ export class SDKServices {
               },
             });
           }
+
           if (
             typeof usage?.totalTokens === "number" &&
             !Number.isNaN(usage.totalTokens)
@@ -260,7 +261,7 @@ export class SDKServices {
           }
         },
       });
-      return { textStream, usage };
+      return { textStream };
     } catch (error) {
       console.error("Error streaming text:", error);
       return { textStream: null };
