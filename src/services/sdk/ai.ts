@@ -78,7 +78,7 @@ export class SDKServices {
   }) {
     try {
       const providerModel = this.getProviderModel(provider, model);
-      const { textStream } = await streamText({
+      const { textStream, usage } = await streamText({
         model: providerModel,
         messages: history,
         tools: {
@@ -246,7 +246,10 @@ export class SDKServices {
               },
             });
           }
-          if (usage) {
+          if (
+            typeof usage?.totalTokens === "number" &&
+            !Number.isNaN(usage.totalTokens)
+          ) {
             await prisma.usage.create({
               data: {
                 callId: callId,
@@ -257,7 +260,7 @@ export class SDKServices {
           }
         },
       });
-      return { textStream };
+      return { textStream, usage };
     } catch (error) {
       console.error("Error streaming text:", error);
       return { textStream: null };
@@ -291,6 +294,7 @@ export class SDKServices {
       if (!parsedObject) {
         return { parsedObject: null, usageTokens };
       }
+      console.log("usageTokens", usageTokens);
 
       return { parsedObject, usageTokens };
     } catch (error) {

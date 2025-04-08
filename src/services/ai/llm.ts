@@ -89,7 +89,6 @@ export class LLMService implements AIService {
       await this.initialize();
     }
 
-    let fullResponse = "";
     this.history.push({ role: "user", content: text });
     this.history = this.normalizeMessageHistory(this.history);
 
@@ -101,7 +100,7 @@ export class LLMService implements AIService {
       },
     });
 
-    const { textStream } = await this.sdkService.streamText({
+    const { textStream, usage } = await this.sdkService.streamText({
       model: this.model,
       provider: this.provider,
       history: this.history,
@@ -112,14 +111,12 @@ export class LLMService implements AIService {
         | "websocket",
       tools: this.tools,
     });
-
     if (textStream) {
       for await (const chunk of textStream) {
+        console.log("usage", usage);
         if (this.listenerCallback) {
           this.listenerCallback(chunk);
         }
-
-        fullResponse += chunk;
 
         eventBus.emit("call.response.chunk.generated", {
           ctx: {
@@ -130,14 +127,13 @@ export class LLMService implements AIService {
           data: { text: chunk },
         });
       }
-      eventBus.emit("call.response.chunk.generated", {
-        ctx: {
-          callId: this.id,
-          provider: "openai",
-          timestamp: Date.now(),
-        },
-        data: { text: "" },
-      });
+
+      // Wait for usage to resolve after stream is complete
+      const resolvedUsage = await usage;
+      console.log("Final usage:", resolvedUsage);
+
+      // Emit completion event with usage information
+      
     }
     console.log("History:", this.history);
   }
