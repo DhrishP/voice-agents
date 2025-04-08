@@ -47,6 +47,7 @@ model Transcript {
   callId     String
   type       TranscriptType
   transcript String
+  createdAt  DateTime       @default(now())
 
   call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
 
@@ -62,6 +63,7 @@ model Recording {
   recordingS3Bucket String?
   recordingS3Region String?
   recordingFormat   String?
+  createdAt         DateTime       @default(now())
 
   call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
 
@@ -77,6 +79,7 @@ model Provider {
   sttModel    String @default("nova-2")
   ttsProvider String @default("elevenlabs")
   ttsModel    String @default("eleven_multilingual_v2")
+  createdAt   DateTime @default(now())
 
   call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
 
@@ -95,6 +98,7 @@ model Usage {
   callId String
   type   UsageType
   usage  Int?
+  createdAt DateTime @default(now())
 
   call Call @relation(fields: [callId], references: [id], onDelete: Cascade)
 
