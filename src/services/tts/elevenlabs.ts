@@ -113,7 +113,7 @@ export class ElevenLabsTTSService implements TTSService {
     });
   }
 
-  private async waitForWebSocketOpen(maxAttempts: number = 10): Promise<void> {
+  private async waitForWebSocketOpen(maxAttempts: number = 20): Promise<void> {
     return new Promise((resolve, reject) => {
       let attempts = 0;
       const checkConnection = () => {
@@ -125,10 +125,7 @@ export class ElevenLabsTTSService implements TTSService {
           );
         } else {
           attempts++;
-          console.log(
-            `Waiting for WebSocket to open... Attempt ${attempts}/${maxAttempts}`
-          );
-          setTimeout(checkConnection, 1000); 
+          setTimeout(checkConnection, 50); 
         }
       };
       checkConnection();
@@ -141,7 +138,9 @@ export class ElevenLabsTTSService implements TTSService {
     }
 
     try {
-      await this.waitForWebSocketOpen();
+      if (this.ws?.readyState !== WebSocket.OPEN) {
+        await this.waitForWebSocketOpen();
+      }
 
       this.ws?.send(
         JSON.stringify({

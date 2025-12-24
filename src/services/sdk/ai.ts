@@ -39,7 +39,7 @@ export class SDKServices {
       provider === "openai"
         ? this.openai(model)
         : provider === "gemini"
-        ? this.google("gemini-2.0-flash-001")
+        ? this.google("gemini-3.0-flash")
         : null;
     if (!providerModel) {
       throw new Error(`Provider ${provider} not supported`);
@@ -50,7 +50,7 @@ export class SDKServices {
   async generateText(transcription: CoreMessage[]) {
     // future use if any
     const { text } = await generateText({
-      model: openai("gpt-4o-mini"),
+      model: this.google("gemini-3.0-flash"), // need to change model
       prompt: `summarize the given transcription ${transcription}`,
     });
     return text;

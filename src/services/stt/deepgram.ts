@@ -43,7 +43,7 @@ export class DeepgramSTTService implements STTService {
         sample_rate: 8000,
         channels: 1,
         interim_results: true,
-        endpointing: 300,
+        endpointing: 200,
         smart_format: true,
       });
 

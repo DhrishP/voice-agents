@@ -282,7 +282,7 @@ eventBus.on("call.transcription.chunk.created", async (event) => {
   }
 
   if (telephonyEngine) {
-    await telephonyEngine.cancel();
+     telephonyEngine.cancel();
   }
 });
 
