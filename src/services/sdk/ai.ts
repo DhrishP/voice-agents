@@ -224,7 +224,7 @@ export class SDKServices {
         onFinish: async ({ text, toolResults, usage }) => {
           if (toolResults.length) {
             for (const toolResult of toolResults) {
-              await prisma.transcript.create({
+               prisma.transcript.create({
                 data: {
                   callId: callId,
                   type: TranscriptType.TOOL,
@@ -238,7 +238,7 @@ export class SDKServices {
             }
           } else {
             history.push({ role: "assistant", content: text });
-            await prisma.transcript.create({
+             prisma.transcript.create({
               data: {
                 callId: callId,
                 type: TranscriptType.ASSISTANT,
@@ -251,7 +251,7 @@ export class SDKServices {
             typeof usage?.totalTokens === "number" &&
             !Number.isNaN(usage.totalTokens)
           ) {
-            await prisma.usage.create({
+             prisma.usage.create({
               data: {
                 callId: callId,
                 type: "LLM",

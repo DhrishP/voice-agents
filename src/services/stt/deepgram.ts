@@ -42,16 +42,18 @@ export class DeepgramSTTService implements STTService {
         encoding: "mulaw",
         sample_rate: 8000,
         channels: 1,
+        interim_results: true,
+        endpointing: 300,
+        smart_format: true,
       });
 
       this.connection.on(LiveTranscriptionEvents.Transcript, (data: any) => {
-        const transcript = data.channel?.alternatives[0]?.transcript;
+        const alternative = data.channel?.alternatives[0];
+        const transcript = alternative?.transcript;
+        const isFinal = data.is_final;
 
         if (transcript && transcript.trim()) {
-          if (this.listenerCallback) {
-            this.listenerCallback(transcript);
-          }
-
+          // Emit speech detected event for faster interruption (even on interim results)
           eventBus.emit("call.speech.detected", {
             ctx: {
               callId: this.id,
@@ -59,14 +61,20 @@ export class DeepgramSTTService implements STTService {
             data: { transcription: transcript },
           });
 
-          eventBus.emit("call.transcription.chunk.created", {
-            ctx: {
-              callId: this.id,
-              provider: "deepgram",
-              timestamp: Date.now(),
-            },
-            data: { transcription: transcript },
-          });
+          if (isFinal) {
+            if (this.listenerCallback) {
+              this.listenerCallback(transcript);
+            }
+
+            eventBus.emit("call.transcription.chunk.created", {
+              ctx: {
+                callId: this.id,
+                provider: "deepgram",
+                timestamp: Date.now(),
+              },
+              data: { transcription: transcript },
+            });
+          }
         }
       });
 

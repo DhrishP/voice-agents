@@ -92,7 +92,7 @@ export class LLMService implements AIService {
     this.history.push({ role: "user", content: text });
     this.history = this.normalizeMessageHistory(this.history);
 
-    await prisma.transcript.create({
+     prisma.transcript.create({
       data: {
         callId: this.id,
         type: TranscriptType.USER,

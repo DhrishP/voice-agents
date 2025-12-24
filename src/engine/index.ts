@@ -431,7 +431,7 @@ eventBus.on("call.hangup.requested", async (event) => {
         text: `Goodbye.`,
       },
     });
-    await prisma.transcript.create({
+     prisma.transcript.create({
       data: {
         transcript: `goodbye`,
         type: "ASSISTANT",
