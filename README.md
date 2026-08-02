@@ -133,31 +133,6 @@ The platform consists of two main components:
 1. **Backend Voice Agent** (`/src`): A framework for processing voice calls using BullMQ queues, workers, and multiple telephony providers
 2. **Frontend Demo** (`/voice-fe`): A WebSocket-based demo application showcasing real-time voice communication with AI agents
 
-## Features
-
-### Backend Features
-
-- Multiple telephony provider support:
-  - Twilio integration for traditional phone calls
-  - WebSocket provider for browser-based communication
-- BullMQ queue system for reliable job processing
-- Redis-backed persistence
-- Modular architecture with provider abstraction
-- Real-time audio streaming and processing
-- Configurable AI service integrations:
-  - Speech-to-Text (Deepgram)
-  - Text-to-Speech (ElevenLabs)
-  - Language Models (OpenAI)
-
-### Frontend Features
-
-- Real-time voice communication via WebSocket
-- Call state management and duration tracking
-- Event-based architecture
-- Configurable AI providers and models
-- TypeScript support with full type definitions
-- Modern React hooks for easy integration
-
 ## Prerequisites
 
 - Node.js (v18 or higher)
