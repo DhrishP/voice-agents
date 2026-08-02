@@ -76,6 +76,8 @@ The platform supports real-time conversational AI over both telephone (Twilio) a
 
 ## Demo
 
+A walkthrough of the platform is available here:
+
 https://www.loom.com/share/ff3a3fda8538445da8e1d3fa8411c09a
 
 ---
