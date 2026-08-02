@@ -55,23 +55,34 @@ The platform supports real-time conversational AI over both telephone (Twilio) a
 ## Architecture
 
 ```text
-                Twilio / Browser
-                       │
-                       ▼
-            Telephony Provider Layer
-                       │
-                       ▼
-                BullMQ Queue
-                       │
-                Voice Workers
-                       │
-        ┌──────────────┼──────────────┐
-        ▼              ▼              ▼
-   Deepgram        OpenAI        ElevenLabs
-      STT            LLM             TTS
-                       │
-                       ▼
-                Audio Response
+  Twilio / Browser
+        │
+        ▼
+Telephony Providers
+        │
+        ▼
+BullMQ + Redis
+        │
+        ▼
+Voice Workers
+        │
+        ▼
+Speech-to-Text (Deepgram)
+        │
+        ▼
+LLM (OpenAI)
+        │
+        ├──────────────┐
+        ▼              │
+Function / Tool Calls  │
+        │              │
+        └──────────────┘
+               │
+               ▼
+Text-to-Speech (ElevenLabs)
+               │
+               ▼
+Audio Response
 ```
 
 ---
