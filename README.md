@@ -1,6 +1,134 @@
-# InducedAI Voice Platform
+# AI Voice Agent Platform
 
-A comprehensive platform for building AI-powered voice applications, featuring both a robust backend voice processing engine and a WebSocket-based frontend demo.
+> Production voice agent platform I built for customer support automation at my previous company.
+
+**Demo:** https://www.loom.com/share/ff3a3fda8538445da8e1d3fa8411c09a
+
+---
+
+## Overview
+
+This repository contains a simplified representative implementation of the voice agent platform I built and deployed in production. The original codebase included company-specific business logic, integrations, prompts, and deployment infrastructure, which have been omitted for confidentiality.
+
+The platform supports real-time conversational AI over both telephone (Twilio) and browser-based WebSockets, orchestrating speech recognition, language models, text-to-speech, and tool execution through a queue-based architecture.
+
+---
+
+## What have I built
+- Designed the overall voice agent architecture.
+- Built the backend orchestration engine.
+- Implemented Twilio,Sarvam and WebSocket(for web calls) telephony providers.
+- Integrated OpenAI, Deepgram, and ElevenLabs.
+- Built the frontend demo for browser-based voice conversations.
+- Designed the queue-based processing pipeline using BullMQ and Redis.
+
+---
+
+## Features
+
+### Backend
+
+- Twilio telephony integration
+- Browser/WebSocket telephony
+- BullMQ worker architecture
+- Redis-backed job processing
+- Streaming Speech-to-Text (Deepgram)
+- Streaming Text-to-Speech (ElevenLabs)
+- OpenAI LLM integration
+- Modular provider abstraction
+- Real-time audio streaming
+- Configurable AI providers
+
+### Frontend
+
+- Real-time browser voice conversations
+- WebSocket communication
+- Call state management
+- Event-driven architecture
+- React hooks
+- Full TypeScript support
+
+---
+
+## Architecture
+
+```text
+                Twilio / Browser
+                       │
+                       ▼
+            Telephony Provider Layer
+                       │
+                       ▼
+                BullMQ Queue
+                       │
+                Voice Workers
+                       │
+        ┌──────────────┼──────────────┐
+        ▼              ▼              ▼
+   Deepgram        OpenAI        ElevenLabs
+      STT            LLM             TTS
+                       │
+                       ▼
+                Audio Response
+```
+
+---
+
+## Demo
+
+https://www.loom.com/share/ff3a3fda8538445da8e1d3fa8411c09a
+
+---
+
+## Production Context
+
+This repository demonstrates the simplified architecture behind the voice agents I built for my previous company. Company-specific prompts, integrations, deployment configuration, and proprietary business logic have been removed, but the implementation reflects the core production design.
+
+The Loom video showcases the voice agents I built. The recording was captured in a development environment, so latency is higher than in production.
+
+---
+
+## Tech Stack
+
+- TypeScript
+- Node.js
+- BullMQ
+- Redis
+- Twilio
+- WebSockets
+- OpenAI
+- Deepgram
+- ElevenLabs
+- Next.js
+- React
+
+---
+
+## Repository Structure
+
+```text
+/
+├── src/
+│   ├── config/
+│   ├── engine/
+│   ├── lib/
+│   ├── server/
+│   ├── services/
+│   ├── types/
+│   └── utils/
+│
+└── voice-fe/
+    ├── app/
+    ├── hooks/
+    ├── components/
+    └── public/
+```
+
+---
+
+## Running Locally
+
+See the setup instructions below for installing dependencies, configuring environment variables, and running both the backend and frontend locally.
 
 ## Overview
 
@@ -43,28 +171,7 @@ The platform consists of two main components:
   - OpenAI API key
   - ElevenLabs API key
   - Deepgram API key
-
-## Project Structure
-
-```
-/
-├── src/                    # Backend voice agent
-│   ├── config/            # Configuration management
-│   ├── engine/            # Core voice processing engine
-│   ├── lib/              # Shared utilities and helpers
-│   ├── server/           # HTTP and WebSocket servers
-│   ├── services/         # Service integrations
-│   ├── types/            # TypeScript types and schemas
-│   └── utils/            # Utility functions
-│
-└── voice-fe/             # Frontend WebSocket demo
-    ├── src/
-    │   ├── app/         # Next.js pages and components
-    │   ├── hooks/       # React hooks including useInducedVoice
-    │   └── components/  # Reusable UI components
-    └── public/          # Static assets
-```
-
+  
 ## Getting Started
 
 ### Backend Setup
@@ -198,4 +305,3 @@ yarn dev
 cd voice-fe
 npm run dev
 ```
-
