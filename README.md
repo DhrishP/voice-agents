@@ -137,13 +137,6 @@ https://www.loom.com/share/ff3a3fda8538445da8e1d3fa8411c09a
 
 See the setup instructions below for installing dependencies, configuring environment variables, and running both the backend and frontend locally.
 
-## Overview
-
-The platform consists of two main components:
-
-1. **Backend Voice Agent** (`/src`): A framework for processing voice calls using BullMQ queues, workers, and multiple telephony providers
-2. **Frontend Demo** (`/voice-fe`): A WebSocket-based demo application showcasing real-time voice communication with AI agents
-
 ## Prerequisites
 
 - Node.js (v18 or higher)
