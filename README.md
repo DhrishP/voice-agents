@@ -8,7 +8,7 @@
 
 ## Overview
 
-This repository contains a simplified implementation of the voice agent platform I built and deployed in production.
+This repository contains a simplified implementation of a production voice agent platform I built for customer support automation at my previous company.
 
 It omits company-specific integrations, prompts, business logic, and deployment infrastructure while preserving the core architecture and engineering patterns.
 
