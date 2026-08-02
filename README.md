@@ -1,6 +1,6 @@
 # AI Voice Agent Platform
 
-> A simplified, reusable implementation of the production voice agent platform I built for customer support automation at my previous company.
+> A simplified implementation of the production voice agent platform I built for customer support automation at my previous company.
 
 **Demo:** https://www.loom.com/share/ff3a3fda8538445da8e1d3fa8411c09a
 
@@ -8,7 +8,9 @@
 
 ## Overview
 
-This repository contains a simplified representative implementation of the voice agent platform I built and deployed in production. The original codebase included company-specific business logic, integrations, prompts, and deployment infrastructure, which have been omitted for confidentiality.
+This repository contains a simplified implementation of the voice agent platform I built and deployed in production.
+
+It omits company-specific integrations, prompts, business logic, and deployment infrastructure while preserving the core architecture and engineering patterns.
 
 The platform supports real-time conversational AI over both telephone (Twilio) and browser-based WebSockets, orchestrating speech recognition, language models, text-to-speech, and tool execution through a queue-based architecture.
 
@@ -79,14 +81,6 @@ The platform supports real-time conversational AI over both telephone (Twilio) a
 A walkthrough of the platform is available here:
 
 https://www.loom.com/share/ff3a3fda8538445da8e1d3fa8411c09a
-
----
-
-## Production Context
-
-This repository demonstrates the simplified architecture behind the voice agents I built for my previous company. Company-specific prompts, integrations, deployment configuration, and proprietary business logic have been removed, but the implementation reflects the core production design.
-
-The Loom video showcases the voice agents I built. The recording was captured in a development environment, so latency is higher than in production.
 
 ---
 
