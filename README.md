@@ -19,7 +19,7 @@ The platform supports real-time conversational AI over both telephone (Twilio) a
 ## What have I built
 - Designed the overall voice agent architecture.
 - Built the backend orchestration engine.
-- Implemented Twilio,Sarvam and WebSocket(for web calls) telephony providers.
+- Implemented Twilio, Sarvam, and WebSocket providers for phone and browser-based voice calls.
 - Integrated OpenAI, Deepgram, and ElevenLabs.
 - Built the frontend demo for browser-based voice conversations.
 - Designed the queue-based processing pipeline using BullMQ and Redis.
