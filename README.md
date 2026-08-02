@@ -1,6 +1,6 @@
 # AI Voice Agent Platform
 
-> Production voice agent platform I built for customer support automation at my previous company.
+> Simplified template to build upon of voice agent platform I built for customer support automation at my previous company.
 
 **Demo:** https://www.loom.com/share/ff3a3fda8538445da8e1d3fa8411c09a
 
